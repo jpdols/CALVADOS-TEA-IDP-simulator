@@ -20,41 +20,63 @@ def default_groups() -> list[dict]:
 
 
 def normalize_groups(groups: object, motifs: Mapping[str, Motif]) -> list[dict]:
-    """Return contiguous single-motif runs, merging identical neighbors.
+    """Canonicalize single-motif runs and explicitly grouped architecture units.
 
-    An explicit split is represented by split_before=True on the second run.
-    It preserves two draggable portions of the same motif until either moves;
-    all other neighboring identical runs are automatically merged. Legacy
-    multi-motif groups are expanded without losing their amino-acid order.
+    A manual group is one ordered *unit* with an integer repetition count.
+    For example, [{A×2}, {B×1}] repeated three times means AAB AAB AAB.
+    Unlike ordinary mono-motif runs, manual group boundaries never merge.
+    Legacy multi-segment groups are retained and treated as one manual unit.
     """
     if not isinstance(groups, list) or len(groups) > MAX_GROUPS:
-        raise ValueError(f"Expected a list of at most {MAX_GROUPS} groups.")
+        raise ValueError(f"Expected a list of at most {MAX_GROUPS} blocks.")
     output: list[dict] = []
     residues = 0
     for index, group in enumerate(groups):
         if not isinstance(group, dict) or not isinstance(group.get("segments"), list):
-            raise ValueError(f"Invalid group {index + 1}.")
-        for j, segment in enumerate(group["segments"]):
+            raise ValueError(f"Invalid motif block {index + 1}.")
+        raw_repeat = group.get("repeat", 1)
+        if isinstance(raw_repeat, bool) or not isinstance(raw_repeat, int) or not 1 <= raw_repeat <= 5000:
+            raise ValueError("Group repeat count must be an integer between 1 and 5000.")
+        parts: list[dict] = []
+        for segment in group["segments"]:
             if not isinstance(segment, dict):
                 raise ValueError("Invalid motif segment.")
             name, count = segment.get("motif"), segment.get("count")
             if not isinstance(name, str) or name not in motifs:
                 raise ValueError(f"Unknown motif in sequence: {name!r}")
             if isinstance(count, bool) or not isinstance(count, int) or not 1 <= count <= 5000:
-                raise ValueError("Repeat count must be an integer between 1 and 5000.")
-            residues += len(motifs[name].sequence) * count
-            if residues > MAX_RESIDUES:
-                raise ValueError(f"Maximum sequence length is {MAX_RESIDUES:,} residues.")
-            split = bool(group.get("split_before", False)) and j == 0
-            if output and output[-1]["segments"][0]["motif"] == name and not split:
-                merged = output[-1]["segments"][0]["count"] + count
-                if merged <= 5000:
-                    output[-1]["segments"][0]["count"] = merged
-                    continue
-            entry = {"segments": [{"motif": name, "count": count}]}
+                raise ValueError("Motif count must be an integer between 1 and 5000.")
+            if parts and parts[-1]["motif"] == name and parts[-1]["count"] + count <= 5000:
+                parts[-1]["count"] += count
+            else:
+                parts.append({"motif": name, "count": count})
+        if not parts:
+            continue
+        residues += sum(len(motifs[p["motif"]].sequence) * p["count"] for p in parts) * raw_repeat
+        if residues > MAX_RESIDUES:
+            raise ValueError(f"Maximum sequence length is {MAX_RESIDUES:,} residues.")
+        manual = bool(group.get("manual", False)) or len(parts) > 1
+        split = bool(group.get("split_before", False))
+        if not manual and raw_repeat == 1:
+            p = parts[0]
+            if (
+                output and not output[-1].get("manual")
+                and output[-1]["segments"][0]["motif"] == p["motif"]
+                and not split
+                and output[-1]["segments"][0]["count"] + p["count"] <= 5000
+            ):
+                output[-1]["segments"][0]["count"] += p["count"]
+                continue
+            block = {"segments": [p]}
             if split and output:
-                entry["split_before"] = True
-            output.append(entry)
+                block["split_before"] = True
+            output.append(block)
+        else:
+            output.append({
+                "segments": parts,
+                "repeat": raw_repeat,
+                "manual": True,
+            })
     if len(output) > MAX_GROUPS:
         raise ValueError(f"Maximum number of motif blocks is {MAX_GROUPS}.")
     return output
@@ -62,26 +84,86 @@ def normalize_groups(groups: object, motifs: Mapping[str, Motif]) -> list[dict]:
 
 def groups_to_sequence(groups: object, motifs: Mapping[str, Motif]) -> str:
     return "".join(
-        motifs[item["motif"]].sequence * item["count"]
+        "".join(motifs[part["motif"]].sequence * part["count"]
+                for part in group["segments"]) * group.get("repeat", 1)
         for group in normalize_groups(groups, motifs)
-        for item in group["segments"]
     )
 
 
 def groups_to_architecture(groups: object, motifs: Mapping[str, Motif]) -> str:
-    return " | ".join(
-        f'{group["segments"][0]["motif"]}×{group["segments"][0]["count"]}'
-        for group in normalize_groups(groups, motifs)
-    )
+    descriptions: list[str] = []
+    for group in normalize_groups(groups, motifs):
+        parts = " + ".join(
+            f'{part["motif"]}×{part["count"]}' for part in group["segments"]
+        )
+        if group.get("manual"):
+            descriptions.append(f"({parts})×{group.get('repeat', 1)}")
+        else:
+            descriptions.append(parts)
+    return " | ".join(descriptions)
 
 
 def count_motifs(groups: object, motifs: Mapping[str, Motif]) -> dict[str, int]:
     counts: dict[str, int] = {}
     for group in normalize_groups(groups, motifs):
-        part = group["segments"][0]
-        name = part["motif"]
-        counts[name] = counts.get(name, 0) + part["count"]
+        repeat = group.get("repeat", 1)
+        for part in group["segments"]:
+            name = part["motif"]
+            counts[name] = counts.get(name, 0) + part["count"] * repeat
     return counts
+
+
+def make_manual_group(groups: object, first: int, last: int,
+                      motifs: Mapping[str, Motif]) -> list[dict]:
+    """Group consecutive blocks into a repeatable ordered unit.
+
+    If an existing group is selected, materialize its copies first so
+    grouping preserves the exact concatenated amino-acid sequence.
+    """
+    canonical = normalize_groups(groups, motifs)
+    if not (0 <= first < last < len(canonical)):
+        raise ValueError("Select at least two adjacent blocks to group.")
+    selected = canonical[first:last + 1]
+    parts: list[dict] = []
+    for block in selected:
+        for _ in range(block.get("repeat", 1)):
+            for part in block["segments"]:
+                if parts and parts[-1]["motif"] == part["motif"] and parts[-1]["count"] + part["count"] <= 5000:
+                    parts[-1]["count"] += part["count"]
+                else:
+                    parts.append(dict(part))
+    new = canonical[:first] + [{"segments": parts, "repeat": 1, "manual": True}] + canonical[last + 1:]
+    return normalize_groups(new, motifs)
+
+
+def set_group_repeats(groups: object, index: int, repeats: int,
+                      motifs: Mapping[str, Motif]) -> list[dict]:
+    canonical = normalize_groups(groups, motifs)
+    if not 0 <= index < len(canonical):
+        raise IndexError(index)
+    if not isinstance(repeats, int) or isinstance(repeats, bool) or not 1 <= repeats <= 5000:
+        raise ValueError("Repetitions must be between 1 and 5000.")
+    block = canonical[index]
+    if block.get("manual"):
+        block["repeat"] = repeats
+    else:
+        block["segments"][0]["count"] = repeats
+    return normalize_groups(canonical, motifs)
+
+
+def ungroup_manual_block(groups: object, index: int,
+                         motifs: Mapping[str, Motif]) -> list[dict]:
+    canonical = normalize_groups(groups, motifs)
+    if not 0 <= index < len(canonical):
+        raise IndexError(index)
+    block = canonical[index]
+    if not block.get("manual"):
+        return canonical
+    expanded = [
+        {"segments": [dict(part)], "split_before": True}
+        for _ in range(block.get("repeat", 1)) for part in block["segments"]
+    ]
+    return normalize_groups(canonical[:index] + expanded + canonical[index + 1:], motifs)
 
 
 def _write_saved_json(path: Path, payload: object) -> None:
