@@ -255,6 +255,28 @@ with simulate_tab:
                             st.code("\n".join(lines[-60:]) or "(empty)", language="text")
                         else:
                             st.caption("No file yet")
+    # A fragment continues polling and advancing sequential batches without
+    # restarting the entire designer or requiring a manual browser refresh.
+    @st.fragment(run_every="5s")
+    def live_queue_status():
+        latest = load_batch(bdir)
+        if latest.status == "running":
+            latest = advance_batch(latest)
+        count = get_batch_counts(latest)
+        st.caption(
+            f"Live queue: {count['running']} running • {count['queued']} queued • "
+            f"{count['finished']} finished • {count['failed']} failed"
+        )
+        for active in latest.items:
+            if active.status == "running":
+                summary = get_run_summary(Path(active.run_dir))
+                st.progress(
+                    float(summary["progress_fraction"]),
+                    text=f"{active.name}: {summary['completed_frames']} / "
+                    f"{active.expected_frames} frames",
+                )
+                st.caption(summary["message"])
+    live_queue_status()
     st.caption("Running occurs in a child Python process; Streamlit terminal output can remain quiet.")
     if st.button("Refresh simulation status"):
         st.rerun()
