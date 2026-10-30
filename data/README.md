@@ -1,0 +1,1 @@
+Place temperature-dependent CALVADOS residue parameter CSVs here. These custom thesis-specific data files are intentionally not committed. Example: residues_gamma_6p0_370K_argdefault_minus.csv. You may instead pass --residue-file to the prepare CLI.
