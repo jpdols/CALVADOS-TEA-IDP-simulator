@@ -2,9 +2,11 @@
 
 Local application for designing elastin-like polypeptide (ELP) / IDP sequences, visualizing their motif arrangements and preparing CALVADOS simulations.
 
-**Status:** Development software. The Streamlit designer, FASTA download, CPU/CUDA platform selector and CALVADOS input preparation are connected. Local execution through `python run.py` is available after preparation; the in-app run-manager/batch interface is not yet connected or end-to-end validated.
+**Status:** Local test candidate. The original full Streamlit app is restored: motif library, custom motifs, drag-and-drop architecture editor, sequence inspection, FASTA download, simulation settings, sequential batch queue, subprocess launch and live progress. CPU/CUDA selection and exit-code reporting have been updated. **Full end-to-end simulation on a real CALVADOS/OpenMM installation is still unverified.**
 
 ## Quick start (Windows / Anaconda Prompt)
+
+**Use `streamlit run app.py` from the repository root.** This `app.py` is the recovered complete local interface, rather than the earlier minimal application.
 
 Install [Git](https://git-scm.com/downloads) and [Miniforge](https://github.com/conda-forge/miniforge) or another working Conda distribution first.
 
@@ -67,15 +69,15 @@ Python alone cannot install your operating system's NVIDIA display/GPU driver.
 1. Select two motif types, motif counts and an architecture type.
 2. Edit the displayed motif blocks using drag/drop, changing block sizes or splitting blocks.
 3. Export the resulting amino-acid sequence as FASTA.
-4. In **Local simulation setup**, choose `CPU` or `CUDA`, set temperature, number of saved frames, output frequency and random seed.
-5. Click **Prepare simulation files** to generate CALVADOS's `config.yaml`, `components.yaml`, `run.py`, FASTA and a copied residue-parameter file.
-6. In a separate terminal with the same conda environment activated, enter the prepared run directory and run:
+4. In **Simulation settings**, choose `CPU` or `CUDA`, set temperature, saved frames and output frequency.
+5. Enter a batch name and select **Add design to run** to queue sequences, or **Add design and run** to begin the queue. The app prepares `config.yaml`, `components.yaml`, `run.py`, FASTA and the temperature-dependent residue table.
+6. The app can start simulations and display live progress. Alternatively, execute a prepared simulation manually from a terminal:
 
 ```bash
 python run.py
 ```
 
-Long simulations may take substantial time; start with a small test run rather than 50,000 frames. The current application does not yet offer a full simulation monitoring dashboard.
+Start with a very small CPU test (e.g. 10–100 saved frames) instead of the default 50,000 frames. The monitoring UI reports progress using DCD frames and treats nonzero process exits as failures. A full CPU/CUDA smoke test is still required.
 
 ### Required temperature-dependent residue parameter files
 
@@ -103,7 +105,7 @@ For Windows paths, put the path in double quotes. To run the generated `run.py`,
 ```text
 app.py
 src/calvados_library_builder/
-    streamlit_app.py        # local UI entry point
+    streamlit_app.py        # simplified alternative UI entry point
     motifs.py               # default/custom motifs
     sequences.py            # architecture generators
     visualization.py        # motif visuals
@@ -111,8 +113,9 @@ src/calvados_library_builder/
     config.py               # simulation settings
     prepare.py              # FASTA + CALVADOS input preparation
     diagnostics.py          # OpenMM platforms and package versions
-    runner.py               # existing local subprocess runner
-    batch.py                # existing sequential queue
+    runner.py               # local subprocess runner and run state
+    run_worker.py           # writes process exit code after completion
+    batch.py                # sequential queue and progress tracker
 tests/
 data/                       # user's custom temperature parameter CSVs
 runs/                       # simulation output, excluded from Git
@@ -131,4 +134,23 @@ python -m pip install -e ".[dev]"
 python -m pytest -q
 ```
 
-The test suite currently checks core sequence generation only. **An end-to-end simulation and native Windows CUDA installation have not yet been verified.** The old runner and queue are retained for further integration into the local Streamlit application.
+The test suite currently checks core sequence generation only. **An end-to-end simulation and native Windows CUDA installation have not yet been verified.** The runner and queue are now integrated with the restored Streamlit app; end-to-end testing on a local installation is the next step.
+
+## Updating the code from your laptop
+
+Once you have cloned the repo, open an Anaconda Prompt in the repository and run:
+
+```bash
+git pull origin main
+```
+
+After editing a Python file, use:
+
+```bash
+git status
+git add app.py src/calvados_library_builder/
+git commit -m "Describe my local improvement"
+git push origin main
+```
+
+On another machine, `git pull origin main` retrieves the change. If you want to change just one script, commit only that script instead of all files. Avoid committing the `runs/` outputs or large trajectory data. When sharing an error here, include `python -m calvados_library_builder.diagnostics` output plus the relevant error log. Please do not publish private local filesystem paths or credentials in logs.
