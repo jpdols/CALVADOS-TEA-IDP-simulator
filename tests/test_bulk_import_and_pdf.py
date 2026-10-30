@@ -52,7 +52,7 @@ def test_vector_pdf_report_complete(tmp_path):
         },
     ])
     pdf = export_comparison_pdf(frame)
-    assert pdf[:8] == b"%PDF-1."
+    assert pdf.startswith(b"%PDF-1.")
     assert len(pdf) > 8000
     outfile = tmp_path / "comparison.pdf"
     outfile.write_bytes(pdf)
