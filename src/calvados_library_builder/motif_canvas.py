@@ -120,7 +120,7 @@ export default function(component) {
     for(const [name,m] of Object.entries(motifs)) {
       const b=elt("button","elp-add");b.type="button";
       const dot=elt("span","elp-dot");dot.style.backgroundColor=m.color||"#9CA3AF";
-      b.title="Add "+name+" ("+m.sequence+")";b.append(dot,elt("span","",name+" +"));
+      b.title="Add "+(m.label||name)+" ("+m.sequence+")";b.append(dot,elt("span","",(m.label||name)+" +"));
       b.onclick=()=>add(name);palette.append(b);
     }
     const lane=elt("div","elp-lane");root.append(lane);
@@ -172,7 +172,7 @@ export default function(component) {
       }
       if(item.count>12)beads.append(elt("span","elp-more","+"+(item.count-12)));
       run.append(beads,elt("div","elp-bracket"),elt("span","elp-count","×"+item.count),
-        elt("span","elp-runname",item.motif));
+        elt("span","elp-runname",motifs[item.motif]?.label||item.motif));
       lane.append(run);gap(i+1);
       // The left and right edges of a block act as reorder drop zones.
       run.ondragover=e=>{e.preventDefault();e.dataTransfer.dropEffect="move";};
