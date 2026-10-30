@@ -78,3 +78,32 @@ def test_discard_first_tenth_before_striding():
     assert trimmed["fraction_collapsed"] == pytest.approx(1.0)
     assert trimmed["mean_rg_nm"] == pytest.approx(3.0)
     assert trimmed["n_collapse_transitions"] == 0
+
+
+def test_replicate_summary_averages_independent_runs():
+    import pandas as pd
+    from calvados_library_builder.replicate_summary import summarize_replicates
+    data = pd.DataFrame([
+        {"name":"ELP_A__rep01","sequence_name":"ELP_A","temperature_K":370.0,
+         "fraction_collapsed":0.2,"mean_rg_nm":3.0,"k_collapse_per_ns":1.0},
+        {"name":"ELP_A__rep02","sequence_name":"ELP_A","temperature_K":370.0,
+         "fraction_collapsed":0.4,"mean_rg_nm":4.0,"k_collapse_per_ns":3.0},
+        {"name":"ELP_A__rep03","sequence_name":"ELP_A","temperature_K":370.0,
+         "fraction_collapsed":0.6,"mean_rg_nm":5.0,"k_collapse_per_ns":5.0},
+    ])
+    overview = summarize_replicates(data)
+    assert len(overview) == 1
+    assert overview.iloc[0]["n_replicates"] == 3
+    assert overview.iloc[0]["fraction_collapsed_mean"] == pytest.approx(0.4)
+    assert overview.iloc[0]["mean_rg_nm_mean"] == pytest.approx(4.0)
+    assert overview.iloc[0]["mean_rg_nm_sd"] == pytest.approx(1.0)
+
+
+def test_triplicate_preflight_rejects_legacy_parent(tmp_path):
+    candidate = Candidate("ELP_A","VPGVG","simple")
+    planned = build_run_plan([candidate],tmp_path/"exp",triplicate=True)
+    parent = tmp_path/"exp"/"ELP_A"
+    parent.mkdir(parents=True)
+    (parent/"config.yaml").write_text("steps: 100\n")
+    with pytest.raises(FileExistsError,match="existing single-run"):
+        validate_run_plan(planned)
