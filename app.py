@@ -26,6 +26,7 @@ from calvados_library_builder.prepare import prepare_simulation
 from calvados_library_builder.runner import get_run_summary, stop_run
 from calvados_library_builder.bulk_import import parse_sequence_library
 from calvados_library_builder.pdf_report import export_comparison_pdf
+from calvados_library_builder.replicate_summary import summarize_replicates
 from calvados_library_builder.replicates import (
     build_run_plan, validate_run_plan, write_replicate_info, experiment_from_path,
 )
@@ -563,6 +564,20 @@ with analyze_tab:
                 "fraction_collapsed", "k_collapse_per_ns", "k_escape_per_ns",
                 "mean_rg_collapsed_nm", "mean_rg_expanded_nm", "n_frames"]
         st.dataframe(table[[c for c in cols if c in table.columns]], use_container_width=True)
+        aggregate = summarize_replicates(table)
+        if not aggregate.empty and (aggregate["n_replicates"] > 1).any():
+            st.markdown("**Replicate-averaged results**")
+            st.caption(
+                "Each replicate is analyzed independently. Values below are means "
+                "and between-replicate standard deviations; frames are not pooled. "
+                "Apply the same equilibration discard to each replicate before comparing."
+            )
+            st.dataframe(aggregate, use_container_width=True, hide_index=True)
+            st.download_button(
+                "Download replicate-averaged CSV",
+                aggregate.to_csv(index=False), "elp_replicate_averages.csv",
+                mime="text/csv",
+            )
         metric = st.selectbox("Comparison metric", [
             "mean_rg_nm", "fraction_collapsed",
             "k_collapse_per_ns", "k_escape_per_ns",
