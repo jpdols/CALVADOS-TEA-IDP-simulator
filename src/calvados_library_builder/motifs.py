@@ -31,7 +31,7 @@ DEFAULT_MOTIFS = {
     "VPGKG": {
         "label": "VPGKG",
         "sequence": "VPGKG",
-        "color": "#C13CFF",
+        "color": "#FF66B3",
     },
     "VPGEG": {
         "label": "VPGEG",
@@ -41,7 +41,7 @@ DEFAULT_MOTIFS = {
     "VPAVG": {
         "label": "VPAVG",
         "sequence": "VPAVG",
-        "color": "#FF66B3",
+        "color": "#20B8B0",
     },
     "RGD": {
         "label": "RGD block",
