@@ -658,7 +658,12 @@ def advance_batch(
 
         if all_finished:
 
-            batch.status = "finished"
+            if any(item.status == "failed" for item in batch.items):
+                batch.status = "failed"
+            elif any(item.status == "stopped" for item in batch.items):
+                batch.status = "stopped"
+            else:
+                batch.status = "finished"
 
             if batch.finished_at is None:
 
