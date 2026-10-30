@@ -5,6 +5,7 @@ Advanced original UI: streamlit run legacy_app.py
 from __future__ import annotations
 
 from pathlib import Path
+from html import escape
 import re
 
 import pandas as pd
@@ -127,7 +128,7 @@ with design_tab:
                 st.markdown(
                     f'<span style="display:inline-block;background:{motif.color};'
                     f'width:13px;height:13px;border-radius:50%;margin-right:8px"></span>'
-                    f'<b>{motif.name}</b> · {motif.sequence}', unsafe_allow_html=True
+                    f'<b>{escape(motif.name)}</b> · {escape(motif.sequence)}', unsafe_allow_html=True
                 )
         with st.form("new_motif_form", clear_on_submit=True):
             left, mid, right = st.columns([1, 2, 1])
