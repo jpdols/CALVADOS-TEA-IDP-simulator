@@ -1,8 +1,8 @@
-"""Draggable mono-motif ELP architecture canvas (Streamlit v2 component).
+"""Draggable ELP architecture canvas with repeatable manual motif groups.
 
-Each colored ball denotes one motif instance. Consecutive identical motifs
-form one bracketed run with a repeat badge. Hover/focus on a run exposes the
-four requested operations; reorder via HTML Drag and Drop or arrow controls.
+Single-motif runs remain compact. Multiple selected adjacent runs can be
+grouped into a repeatable ordered architecture block. Dragging, hover editing
+and exact sequence generation use the same serialized model.
 """
 from __future__ import annotations
 
