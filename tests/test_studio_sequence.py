@@ -8,6 +8,7 @@ from calvados_library_builder.studio_sequence import (
     default_groups, extract_single_fasta, groups_to_architecture,
     groups_to_sequence, load_custom_motifs, normalize_groups,
     save_custom_motifs, segment_raw_sequence, load_draft, save_draft,
+    make_manual_group, set_group_repeats, ungroup_manual_block,
 )
 
 
@@ -125,3 +126,59 @@ def test_draft_save_fallback_when_windows_rename_is_denied(tmp_path, monkeypatch
     assert restored == new_groups
     assert (tmp_path / "draft.json.previous").exists()
     assert not (tmp_path / "draft.json.tmp").exists()
+
+
+def test_manual_group_repeats_full_motif_pattern_and_persists(tmp_path):
+    motifs = get_default_motifs()
+    original = [
+        {"segments": [{"motif": "IPAVG", "count": 1}]},
+        {"segments": [{"motif": "VPGVG", "count": 2}]},
+        {"segments": [{"motif": "VPGIG", "count": 1}]},
+        {"segments": [{"motif": "RGD", "count": 1}]},
+    ]
+    grouped = make_manual_group(original, 0, 2, motifs)
+    assert len(grouped) == 2
+    assert grouped[0]["manual"]
+    assert grouped[0]["segments"] == [
+        {"motif": "IPAVG", "count": 1},
+        {"motif": "VPGVG", "count": 2},
+        {"motif": "VPGIG", "count": 1},
+    ]
+    pattern = "IPAVG" + "VPGVG" * 2 + "VPGIG"
+    assert groups_to_sequence(grouped, motifs) == pattern + "AVTGRGDSPASS"
+    tripled = set_group_repeats(grouped, 0, 3, motifs)
+    assert groups_to_sequence(tripled, motifs) == pattern * 3 + "AVTGRGDSPASS"
+    assert count_motifs(tripled, motifs) == {
+        "IPAVG": 3, "VPGVG": 6, "VPGIG": 3, "RGD": 1,
+    }
+    assert groups_to_architecture(tripled, motifs).startswith(
+        "(IPAVG×1 + VPGVG×2 + VPGIG×1)×3"
+    )
+    path = tmp_path / "complex_draft.json"
+    save_draft(path, "grouped_elp", tripled, motifs)
+    name, restored = load_draft(path, motifs)
+    assert name == "grouped_elp"
+    assert restored == tripled
+    assert groups_to_sequence(restored, motifs) == groups_to_sequence(tripled, motifs)
+    expanded = ungroup_manual_block(restored, 0, motifs)
+    assert groups_to_sequence(expanded, motifs) == groups_to_sequence(tripled, motifs)
+    assert all(not item.get("manual") for item in expanded)
+
+
+def test_manual_group_validation_and_selection():
+    motifs = get_default_motifs()
+    original = [
+        {"segments": [{"motif": "VPGVG", "count": 2}]},
+        {"segments": [{"motif": "IPAVG", "count": 1}]},
+        {"segments": [{"motif": "VPGIG", "count": 1}]},
+    ]
+    with pytest.raises(ValueError, match="adjacent"):
+        make_manual_group(original, 1, 1, motifs)
+    with pytest.raises(ValueError, match="between 1 and 5000"):
+        normalize_groups([{"segments": [{"motif": "VPGVG", "count": 1}],
+                           "repeat": 0, "manual": True}], motifs)
+    grouped = make_manual_group(original, 0, 1, motifs)
+    with pytest.raises(ValueError, match="Maximum sequence length"):
+        set_group_repeats(grouped, 0, 5000, motifs)
+    with pytest.raises(ValueError, match="Repetitions"):
+        set_group_repeats(grouped, 0, 0, motifs)
