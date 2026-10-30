@@ -86,7 +86,7 @@ data/residues_gamma_6p0_370K_argdefault_minus.csv
 data/residues_gamma_6p0_300K_argdefault_minus.csv
 ```
 
-for the selected temperature. **These thesis-specific data files are not included in this repository.** Provide the scientifically correct residue parameter table in `data/`, or use the preparation CLI with `--residue-file` to select an explicit file. Merely installing CALVADOS does not automatically recreate these temperature-specific modified parameter tables. Preparation fails clearly when it cannot locate the CSV.
+for the selected temperature. **All 11 thesis-specific tables (300 K to 400 K in 10 K increments) are now included in `data/`.** The application selects the matching temperature file automatically for these temperatures. For other temperatures, supply a validated CSV using the CLI `--residue-file` option. These tables are supplied as research inputs, not generated automatically by CALVADOS.
 
 ### CLI preparation
 
