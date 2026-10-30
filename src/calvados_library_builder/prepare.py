@@ -317,13 +317,12 @@ def prepare_simulation(
 
         charge_termini=config.charge_termini,
 
-        fresidues=str(
-            residues_for_calvados
-        ),
+        # Always serialize relative input references with forward slashes.
+        # They are understood by Path on both Windows and POSIX and make
+        # generated components.yaml deterministic across platforms.
+        fresidues=residues_for_calvados.as_posix(),
 
-        ffasta=str(
-            fasta_for_calvados
-        ),
+        ffasta=fasta_for_calvados.as_posix(),
     )
 
     components.add(
