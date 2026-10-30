@@ -168,6 +168,13 @@ def prepare_simulation(
         / "input"
     )
 
+    # Never overwrite a prepared or completed simulation from the app.
+    if run_dir.exists() and any(run_dir.iterdir()):
+        raise FileExistsError(
+            f"Run directory already contains files: {run_dir}. "
+            "Use another sequence name/batch or move the existing run."
+        )
+
     run_dir.mkdir(
         parents=True,
         exist_ok=True,
