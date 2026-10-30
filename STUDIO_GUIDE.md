@@ -146,9 +146,9 @@ used for FASTA export and CALVADOS preparation.
 | VPGVG | VPGVG | `#4C78A8` |
 | IPAVG | IPAVG | `#F2CF5B` |
 | VPGIG | VPGIG | `#54A24B` |
-| VPGKG | VPGKG | `#C13CFF` |
+| VPGKG | VPGKG | `#FF66B3` |
 | VPGEG | VPGEG | `#F28E2B` |
-| VPAVG | VPAVG | `#FF66B3` |
+| VPAVG | VPAVG | `#20B8B0` |
 | RGD block | AVTGRGDSPASS | `#7944AC` |
 
 The RGD purple is matched to the user-supplied color reference.
