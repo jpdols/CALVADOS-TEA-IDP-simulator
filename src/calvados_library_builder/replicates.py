@@ -98,6 +98,11 @@ def validate_run_plan(planned: list[PlannedRun], existing_items: Iterable = ()) 
             raise FileExistsError(f"Simulation already exists in queue: {item.simulation_name}")
         if str(item.run_dir).casefold() in known_paths:
             raise FileExistsError(f"Run folder is already queued: {item.run_dir}")
+        if item.replicate_count > 1 and (item.batch_dir / "config.yaml").exists():
+            raise FileExistsError(
+                f"Cannot nest triplicate outputs inside an existing single-run directory: "
+                f"{item.batch_dir}. Choose a new experiment name."
+            )
         if item.run_dir.exists() and any(item.run_dir.iterdir()):
             raise FileExistsError(f"Run folder already contains files: {item.run_dir}")
 
