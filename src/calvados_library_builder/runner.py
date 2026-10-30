@@ -752,7 +752,7 @@ def start_run(
     )
 
     command = [
-        sys.executable, "-m", "calvados_library_builder.run_worker",
+        sys.executable, "-u", "-m", "calvados_library_builder.run_worker",
         str(run_script),
         str(run_dir / RUNNER_EXIT_FILENAME),
     ]
