@@ -98,3 +98,30 @@ def test_reject_corrupt_or_oversized_groups():
         groups_to_sequence([{"segments": [{"motif": "UNKNOWN", "count": 1}]}], motifs)
     with pytest.raises(ValueError, match="Repeat count"):
         groups_to_sequence([{"segments": [{"motif": "VPGVG", "count": 0}]}], motifs)
+
+
+def test_draft_save_fallback_when_windows_rename_is_denied(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    motifs = get_default_motifs()
+    path = tmp_path / "draft.json"
+    save_draft(path, "before", default_groups(), motifs)
+
+    original_replace = Path.replace
+
+    def blocked_replace(self, destination):
+        if str(self).endswith(".tmp"):
+            raise PermissionError("WinError 5: access denied")
+        return original_replace(self, destination)
+
+    monkeypatch.setattr(Path, "replace", blocked_replace)
+    new_groups = [
+        {"segments": [{"motif": "VPGVG", "count": 3}]},
+        {"segments": [{"motif": "RGD", "count": 1}]},
+    ]
+    save_draft(path, "after", new_groups, motifs)
+    name, restored = load_draft(path, motifs)
+    assert name == "after"
+    assert restored == new_groups
+    assert (tmp_path / "draft.json.previous").exists()
+    assert not (tmp_path / "draft.json.tmp").exists()
