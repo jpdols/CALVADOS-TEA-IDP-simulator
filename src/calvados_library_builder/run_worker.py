@@ -14,7 +14,12 @@ def main() -> int:
     script = Path(sys.argv[1]).resolve()
     exit_file = Path(sys.argv[2]).resolve()
     try:
-        result = subprocess.run([sys.executable, str(script)], cwd=str(script.parent), check=False)
+        from .preflight import inspect_run
+        check = inspect_run(script.parent)
+        if not check["ok"]:
+            raise RuntimeError("CALVADOS preflight failed: " + "; ".join(check["errors"]))
+        print("Launching CALVADOS:", check["command_display"], flush=True)
+        result = subprocess.run(check["command"], cwd=str(script.parent), check=False)
         code = result.returncode
     except Exception as error:
         print(f"Unable to launch simulation: {error}", file=sys.stderr)
