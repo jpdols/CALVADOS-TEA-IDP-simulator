@@ -16,7 +16,7 @@ class Candidate:
 
 
 def validate_sequence(sequence: str) -> str:
-    cleaned = re.sub(r"\\s+", "", sequence).upper()
+    cleaned = re.sub(r"\s+", "", sequence).upper()
     if not cleaned or (set(cleaned) - VALID_AA):
         raise ValueError("Sequence must contain only the 20 standard one-letter amino acids.")
     return cleaned
