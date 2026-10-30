@@ -58,7 +58,7 @@ def summarize_rg(rg_nm, frame_dt_ns: float, threshold_nm: float) -> dict:
         inner[1:-1] = True
     cd = lengths[labels & inner]
     ed = lengths[(~labels) & inner]
-    quantiles = np.percentile(rg, [5, 25, 50, 75, 95])
+    quantiles = np.percentile(rg, [5, 50, 95])
 
     return {
         "n_frames": int(len(rg)),
@@ -66,12 +66,10 @@ def summarize_rg(rg_nm, frame_dt_ns: float, threshold_nm: float) -> dict:
         "duration_ns": float(len(rg) * frame_dt_ns),
         "rg_theta_nm": float(threshold_nm),
         "mean_rg_nm": float(np.mean(rg)),
-        "std_rg_nm": float(np.std(rg, ddof=1)),
-        "median_rg_nm": float(quantiles[2]),
+        "median_rg_nm": float(quantiles[1]),
         "p05_rg_nm": float(quantiles[0]),
-        "p95_rg_nm": float(quantiles[4]),
-        "rg_range_90_nm": float(quantiles[4] - quantiles[0]),
-        "iqr_rg_nm": float(quantiles[3] - quantiles[1]),
+        "p95_rg_nm": float(quantiles[2]),
+        "rg_range_90_nm": float(quantiles[2] - quantiles[0]),
         "rg_relative_theta": float(np.mean(rg) / threshold_nm),
         "fraction_collapsed": float(np.mean(c)),
         "mean_rg_collapsed_nm": float(np.mean(rg[c])) if c.any() else float("nan"),
