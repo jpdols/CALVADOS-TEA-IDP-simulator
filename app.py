@@ -26,6 +26,9 @@ from calvados_library_builder.prepare import prepare_simulation
 from calvados_library_builder.runner import get_run_summary, stop_run
 from calvados_library_builder.bulk_import import parse_sequence_library
 from calvados_library_builder.pdf_report import export_comparison_pdf
+from calvados_library_builder.replicates import (
+    build_run_plan, validate_run_plan, write_replicate_info, experiment_from_path,
+)
 from calvados_library_builder.motifs import get_default_motifs, create_motif
 from calvados_library_builder.motif_canvas import motif_canvas
 from calvados_library_builder.studio_sequence import (
@@ -73,6 +76,7 @@ def batch_paths() -> list[Path]:
 
 def run_paths() -> list[Path]:
     found = {p.parent for p in ROOT.glob("*/*/config.yaml")}
+    found.update(p.parent for p in ROOT.glob("*/*/*/config.yaml"))
     found.update(p.parent for p in ROOT.glob("*/config.yaml"))
     return sorted(found, key=lambda p: str(p).lower())
 
@@ -321,26 +325,49 @@ with design_tab:
         ph = st.number_input("pH", 0.0, 14.0, 7.0, help="Solution pH. Affects residue protonation / effective charge and therefore electrostatic interactions according to the CALVADOS model.")
         ionic = st.number_input("Ionic strength (M)", 0.0, 5.0, 0.17, help="Ionic strength in mol/L. Controls Debye electrostatic screening; higher salt generally screens charge interactions more strongly.")
         first_seed = st.number_input("Starting random seed", 0, 2147483646, 1, help="Random number seed for reproducibility. In a library, each successive sequence receives an incremented seed. Use different seeds for independent replicate runs.")
+    triplicate = st.toggle(
+        "Run in triplicate (3 independent replicates)",
+        value=False,
+        help="Prepare 3 independent simulations per sequence, with different seeds. "
+             "Each replicate has its own DCD, checkpoint, log and analysis folder.",
+    )
+    count_reps = 3 if triplicate else 1
     st.caption(
-        f"{int(frames) * int(save_every):,} integration steps per sequence; "
-        f"{len(candidates)} sequence(s), one single-chain simulation each."
+        f"{int(frames) * int(save_every):,} integration steps per run · "
+        f"{len(candidates)} sequence(s) × {count_reps} replicate(s) "
+        f"= {len(candidates) * count_reps} independent run(s)."
     )
     if st.button("Prepare designs", type="primary", disabled=not candidates):
         try:
-            b = load_or_create_batch(batch_name)
+            # Preflight every intended destination before preparing any files.
+            experiment_dir = choose_batch_name(batch_name)
+            plan = build_run_plan(
+                candidates, experiment_dir,
+                triplicate=bool(triplicate), first_seed=int(first_seed),
+            )
+            existing = (
+                load_batch(experiment_dir)
+                if (experiment_dir / "batch_state.json").exists() else None
+            )
+            validate_run_plan(plan, existing.items if existing else ())
+            b = existing if existing else create_batch(safe_label(batch_name), experiment_dir)
             prepared = []
-            for i, candidate in enumerate(candidates):
+            for item in plan:
                 cfg = SimulationConfig(
-                    name=candidate.name, sequence=candidate.sequence,
+                    name=item.simulation_name, sequence=item.sequence,
                     temperature=float(temperature), pH=float(ph),
                     ionic_strength=float(ionic), box_size=float(box_nm),
                     n_frames=int(frames), save_every=int(save_every),
-                    platform=platform, seed=int(first_seed) + i,
+                    platform=platform, seed=item.seed, replicate=item.replicate,
                 )
-                run = prepare_simulation(cfg, batch_dir=Path(b.batch_dir))
-                b = add_simulation(b, candidate.name, run, int(frames))
-                prepared.append(candidate.name)
-            st.success(f"Prepared {len(prepared)} run(s) in '{b.name}'. Open Simulate to start.")
+                run = prepare_simulation(cfg, batch_dir=item.batch_dir)
+                write_replicate_info(item, safe_label(batch_name))
+                b = add_simulation(b, item.simulation_name, run, int(frames))
+                prepared.append(item.simulation_name)
+            st.success(
+                f"Prepared {len(prepared)} independent run(s) in '{b.name}'. "
+                "Open Simulate to start."
+            )
         except Exception as exc:
             st.error(f"Preparation stopped: {exc}")
             st.caption("Previously prepared sequences are retained; inspect the batch before retrying.")
@@ -453,6 +480,14 @@ with analyze_tab:
             st.warning("No DCD trajectory found yet. Run the simulation first.")
         else:
             st.caption("Trajectory found: " + ", ".join(p.name for p in dcds))
+        discard_first_10 = st.toggle(
+            "Discard first 10% of trajectory frames (equilibration)",
+            value=False,
+            key="discard_first_ten_percent",
+            help="Exclude floor(10% × total original DCD frames) before striding, "
+                 "Rg statistics and transition counting. The excluded portion "
+                 "will not contribute to any metric or saved plot.",
+        )
         ac, bc = st.columns(2)
         with ac:
             stride = st.number_input("Analysis stride", 1, 10000, 1)
@@ -468,7 +503,10 @@ with analyze_tab:
         )
         if st.button("Analyze selected trajectory", type="primary", disabled=not dcds):
             try:
-                result = analyze_run(target, stride=int(stride), theta_ref_nm=float(theta_ref))
+                result = analyze_run(
+                    target, stride=int(stride), theta_ref_nm=float(theta_ref),
+                    discard_fraction=0.1 if discard_first_10 else 0.0,
+                )
                 st.success(f"Analyzed {result['n_frames']} frames, saved results in {target / 'analysis'}")
             except Exception as exc:
                 st.error(f"Analysis failed: {exc}")
@@ -484,6 +522,7 @@ with analyze_tab:
             st.caption(
                 f"Rg theta = {result['rg_theta_nm']:.3f} nm • "
                 f"{int(result['n_frames'])} sampled frames • "
+                f"{int(result.get('discarded_frames', 0))} discarded • "
                 f"{result['sample_dt_ns']:.4g} ns per analyzed frame."
             )
             p1, p2 = st.columns(2)
@@ -504,7 +543,7 @@ with analyze_tab:
     st.divider()
     st.subheader("Compare analyzed sequences")
     analyzed_runs = [p for p in runs if (p / "analysis" / "summary.csv").is_file()]
-    experiments = sorted({p.parent.name for p in analyzed_runs})
+    experiments = sorted({experiment_from_path(p, ROOT) for p in analyzed_runs})
     experiment_filter = st.selectbox(
         "Experiment to compare",
         ["All experiments", *experiments],
@@ -514,7 +553,7 @@ with analyze_tab:
     ) if experiments else "All experiments"
     comparison_runs = [
         p for p in analyzed_runs
-        if experiment_filter == "All experiments" or p.parent.name == experiment_filter
+        if experiment_filter == "All experiments" or experiment_from_path(p, ROOT) == experiment_filter
     ]
     summary_files = [p / "analysis" / "summary.csv" for p in comparison_runs]
     if summary_files:
