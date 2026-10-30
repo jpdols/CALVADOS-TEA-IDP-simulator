@@ -309,12 +309,12 @@ with analyze_tab:
             stride = st.number_input("Analysis stride", 1, 10000, 1)
         with bc:
             theta_ref = st.number_input(
-                "Theta Rg at N=420 (nm)", min_value=0.1, max_value=20.0,
+                "Rgθ at 420 residues (nm; Hofmann default)", min_value=0.1, max_value=20.0,
                 value=float(THETA_REF_NM), step=0.001, format="%.4f",
             )
         st.caption(
             "Collapsed = Rg < Rgθ(N), with Rgθ(N) = Rgθ(420) × "
-            "sqrt((N−1)/419). Rates count state transitions per nanosecond "
+             "sqrt((N−1)/419), where the default follows √(2 × 0.40 nm × 0.38 nm × (N−1) / 6). Rates count state transitions per nanosecond "
             "in the originating state."
         )
         if st.button("Analyze selected trajectory", type="primary", disabled=not dcds):
