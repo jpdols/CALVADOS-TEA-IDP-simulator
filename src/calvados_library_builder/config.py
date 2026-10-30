@@ -98,7 +98,7 @@ MOTIFS = {
     },
     "VPGKG": {
         "label": "VPGKG",
-        "color": "#C13CFF",
+        "color": "#FF66B3",
     },
     "VPGEG": {
         "label": "VPGEG",
@@ -106,7 +106,7 @@ MOTIFS = {
     },
     "VPAVG": {
         "label": "VPAVG",
-        "color": "#FF66B3",
+        "color": "#20B8B0",
     },
 }
 
