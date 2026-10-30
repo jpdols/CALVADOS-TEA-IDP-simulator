@@ -280,7 +280,6 @@ def prepare_simulation(
 
         steps=config.steps,
 
-        runtime=0,
 
         platform=config.platform,
         random_number_seed=config.seed,
