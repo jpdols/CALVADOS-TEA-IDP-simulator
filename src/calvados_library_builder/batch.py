@@ -571,24 +571,15 @@ def refresh_running_item(
         ]
     )
 
-    if (
-        completed_frames
-        >= item.expected_frames
-    ):
-
+    if summary["status"] == "finished" and completed_frames >= item.expected_frames:
         item.status = "finished"
-
-        item.message = (
-            "Simulation completed."
-        )
-
+        item.message = "Simulation completed successfully."
+    elif summary["status"] == "stopped":
+        item.status = "stopped"
+        item.message = "Simulation stopped."
     else:
-
-        item.status = "finished"
-
-        item.message = (
-            "Simulation process ended."
-        )
+        item.status = "failed"
+        item.message = summary.get("message", "Simulation failed.")
 
     batch.current_index = None
 
