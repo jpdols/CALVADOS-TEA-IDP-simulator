@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import re
 
 
 # ============================================================
@@ -199,7 +200,12 @@ class SimulationConfig:
         if self.residue_file is not None:
             return Path(self.residue_file).expanduser().resolve()
 
-        temperature_int = int(round(self.temperature))
+        if not float(self.temperature).is_integer():
+            raise ValueError(
+                "Automatic residue-table selection requires a whole-number "
+                "temperature in kelvin; supply a custom residue file otherwise."
+            )
+        temperature_int = int(self.temperature)
 
         filename = RESIDUE_FILE_TEMPLATE.format(
             temperature=temperature_int
@@ -257,9 +263,18 @@ def validate_config(
     # --------------------------------------------------------
 
     if not config.name.strip():
+        raise ValueError("Simulation name cannot be empty.")
+    # Simulation names become directory names, FASTA IDs and CALVADOS system IDs.
+    # Restrict them to portable, safe characters on Windows and Linux.
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", config.name.strip()):
         raise ValueError(
-            "Simulation name cannot be empty."
+            "Simulation name must start with a letter or digit and contain "
+            "only letters, digits, underscores, hyphens or dots."
         )
+    if config.name.strip().endswith("."):
+        raise ValueError("Simulation name cannot end with a dot.")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*\\.f(?:a|asta)", config.fasta_name, re.I):
+        raise ValueError("FASTA filename must be a simple .fa/.fasta file name.")
 
     # --------------------------------------------------------
     # Sequence
@@ -339,6 +354,9 @@ def validate_config(
     # --------------------------------------------------------
     # Replicate
     # --------------------------------------------------------
+
+    if not isinstance(config.seed, int) or config.seed < 0:
+        raise ValueError("Random seed must be a nonnegative integer.")
 
     if config.replicate < 1:
         raise ValueError(
