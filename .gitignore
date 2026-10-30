@@ -1,3 +1,22 @@
+# Simulation products and large files
 runs/
+results/
+*.dcd
+*.chk
+*.xtc
+*.trr
+*.log
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.venv/
+.env
+# Streamlit
+.streamlit/secrets.toml
+# Editor
+.vscode/
+.idea/
+.DS_Store
