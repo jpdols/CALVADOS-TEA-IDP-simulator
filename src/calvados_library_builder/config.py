@@ -273,7 +273,7 @@ def validate_config(
         )
     if config.name.strip().endswith("."):
         raise ValueError("Simulation name cannot end with a dot.")
-    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*\\.f(?:a|asta)", config.fasta_name, re.I):
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*\.f(?:a|asta)", config.fasta_name, re.I):
         raise ValueError("FASTA filename must be a simple .fa/.fasta file name.")
 
     # --------------------------------------------------------
