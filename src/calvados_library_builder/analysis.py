@@ -14,9 +14,16 @@ import numpy as np
 import pandas as pd
 
 TIMESTEP_PS = 0.01  # CALVADOS 0.9.1 Langevin integrator
-THETA_REF_NM = 4.3037
+# Hofmann theta-state ideal-chain reference: lp*=0.40 nm, b=0.38 nm.
+# N is the number of amino acids; N-1 is the number of backbone bonds.
+THETA_PERSISTENCE_LENGTH_NM = 0.40
+THETA_BOND_LENGTH_NM = 0.38
 THETA_REF_LENGTH = 420
 THETA_EXPONENT = 0.5
+THETA_REF_NM = math.sqrt(
+    2 * THETA_PERSISTENCE_LENGTH_NM * THETA_BOND_LENGTH_NM
+    * (THETA_REF_LENGTH - 1) / 6
+)
 
 
 def theta_rg(n: int, reference_nm: float = THETA_REF_NM,
@@ -208,7 +215,9 @@ def analyze_run(run_dir: Path, stride: int = 1,
     fig.savefig(out_dir / "rg_distribution.png", dpi=180)
     plt.close(fig)
     methods = {
-        "theta_definition": "Rg_theta(N) = theta_ref_nm*((N-1)/(theta_ref_length-1))**exponent",
+        "theta_definition": "Rg_theta(N) = sqrt(2*l_p_star*b*(N-1)/6); default l_p_star=0.40 nm, b=0.38 nm. Optional theta_ref_nm rescales the result.",
+        "theta_persistence_length_nm": THETA_PERSISTENCE_LENGTH_NM,
+        "theta_bond_length_nm": THETA_BOND_LENGTH_NM,
         "theta_ref_nm": theta_ref_nm,
         "theta_ref_length": theta_ref_length,
         "theta_exponent": theta_exponent,
