@@ -32,7 +32,7 @@ step count and missing inputs. The child wrapper executes the generated script
 as:
 
 ```text
-python ABSOLUTE_RUN_DIR/run.py --path ABSOLUTE_RUN_DIR --config config.yaml --components components.yaml
+python -u -m calvados_library_builder.calvados_entrypoint ABSOLUTE_RUN_DIR/run.py --path ABSOLUTE_RUN_DIR --config config.yaml --components components.yaml
 ```
 
 If a run stays at 0 frames, inspect these files inside its run directory:
@@ -98,3 +98,22 @@ python -m streamlit run legacy_app.py
 ```
 
 The legacy app remains available but is not the recommended starting point.
+
+## Windows: checkpoint error WinError 5/183
+
+The original OpenMM 8.4 checkpoint saver renames a temporary file over an
+existing `restart.chk`. Some Windows drives reject this replacement. This
+does not imply an MD integration failure. The new entrypoint applies a
+**Windows-only** compatibility fix *inside the simulation child process*:
+it calls OpenMM's supported `saveCheckpoint(file_object)` API instead of
+`saveCheckpoint(filename)`, bypassing rename operations. Before overwriting
+an existing checkpoint it saves a full copy to `restart.chk.previous`.
+
+The previous checkpoint is preserved for recovery, but file-object writing
+is not atomic; do not interrupt the process during checkpoint writes.
+No packages need reinstalling, and the CALVADOS simulation equations and
+integrator are untouched. The helper does nothing on Linux.
+
+**Do not restart a failed folder blindly.** Existing trajectories and
+checkpoints may represent different integration steps. Leave older folders
+alone and use a new experiment name for the next short smoke test.
