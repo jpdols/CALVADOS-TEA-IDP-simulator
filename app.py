@@ -354,7 +354,7 @@ with design_tab:
         preview(staged)
         st.download_button(
             "Download staged collection FASTA",
-            data="".join(f">{c.name}\\n{c.sequence}\\n" for c in staged),
+            data="".join(f">{c.name}\n{c.sequence}\n" for c in staged),
             file_name="elp_staged_designs.fasta",
             mime="text/plain",
         )
