@@ -29,7 +29,7 @@ CSS = """
 .elp-gap{width:12px;min-height:54px;border-radius:8px;align-self:center}
 .elp-gap.over{background:var(--st-primary-color,#a78bfa)}
 .elp-tools{display:none;position:absolute;z-index:20;top:-36px;left:50%;transform:translateX(-50%);align-items:center;gap:3px;padding:5px 6px;border:1px solid var(--st-border-color,#ccd3dc);border-radius:9px;background:var(--st-background-color,#fff);box-shadow:0 5px 18px #0002;white-space:nowrap;cursor:default}
-.elp-run:hover .elp-tools,.elp-run:focus-within .elp-tools{display:flex}
+.elp-run:hover .elp-tools,.elp-run:focus-within .elp-tools,.elp-run.toolbar-open .elp-tools{display:flex}
 .elp-tool{min-width:26px;height:25px;padding:0 5px;border:1px solid transparent;border-radius:6px;color:var(--st-text-color);background:transparent;font-size:12px;cursor:pointer}
 .elp-tool:hover,.elp-tool:focus-visible{background:var(--st-secondary-background-color,#eee);border-color:var(--st-border-color,#ccd3dc)}
 .elp-tool:disabled{opacity:.35;cursor:not-allowed}
@@ -66,7 +66,7 @@ export default function(component) {
     split_before:!!block.split_before
   });
   if(!host.__model||host.__model.revision!==revision){
-    host.__model={blocks:initial.map(clean),selected:new Set(),revision};
+    host.__model={blocks:initial.map(clean),selected:new Set(),toolbarIndex:null,revision};
   }
   const model=host.__model;
   const elt=(tag,cls,label)=>{
@@ -110,6 +110,9 @@ export default function(component) {
     const norm=normalize(blocks);
     if(!valid(norm)){window.alert("Maximum: 50,000 amino acids, 2,000 blocks or 5,000 repetitions per block.");return;}
     model.blocks=norm;model.selected.clear();
+    // Keep the control panel expanded after +1/-1, repeat edits and split.
+    // It closes only when the pointer leaves the block and its popup.
+    if(model.toolbarIndex!==null && model.toolbarIndex>=norm.length)model.toolbarIndex=null;
     setStateValue("groups",norm.map(b=>{
       const record={segments:b.segments.map(s=>({...s}))};
       if(b.manual){record.manual=true;record.repeat=b.repeat;}
@@ -121,6 +124,7 @@ export default function(component) {
   function add(name){if(known(name))commit([...copy(),{segments:[{motif:name,count:1}],repeat:1,manual:false}]);}
   function move(source,target){
     if(!Number.isInteger(source)||source<0||source>=model.blocks.length)return;
+    model.toolbarIndex=null;
     const blocks=copy(),[item]=blocks.splice(source,1);
     const dest=Math.max(0,Math.min(blocks.length,source<target?target-1:target));
     blocks.splice(dest,0,item);commit(blocks);
@@ -191,6 +195,7 @@ export default function(component) {
   function draw(){
     host.replaceChildren();
     const root=elt("div","elp-board");host.append(root);
+    root.onpointerleave=()=>{model.toolbarIndex=null;};
     const head=elt("div","elp-header");
     head.append(elt("span","elp-title","ELP motif architecture"),
       elt("span","elp-hint","Click / Shift-click blocks to select · drag to reorder"));
@@ -226,8 +231,13 @@ export default function(component) {
     gap(0);
     model.blocks.forEach((b,i)=>{
       const manual=b.manual,repeat=manual?b.repeat:b.segments[0].count;
-      const run=elt("div","elp-run"+(manual?" elp-group":"")+(model.selected.has(i)?" selected":""));
+      const run=elt("div","elp-run"+(manual?" elp-group":"")+(model.selected.has(i)?" selected":"")+(model.toolbarIndex===i?" toolbar-open":""));
       run.tabIndex=0;run.draggable=true;
+      run.onpointerenter=()=>{model.toolbarIndex=i;};
+      run.onpointerleave=()=>{
+        if(model.toolbarIndex===i)model.toolbarIndex=null;
+        run.classList.remove("toolbar-open");
+      };
       run.title=manual?"Drag this repeatable motif group":"Drag this motif block";
       run.onclick=e=>{
         if(e.shiftKey||e.ctrlKey||e.metaKey){
@@ -237,18 +247,20 @@ export default function(component) {
         draw();
       };
       run.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();if(model.selected.has(i))model.selected.delete(i);else model.selected.add(i);draw();}};
-      run.ondragstart=e=>{e.dataTransfer.setData("application/x-elp-run",String(i));e.dataTransfer.effectAllowed="move";run.classList.add("dragging");};
+      run.ondragstart=e=>{model.toolbarIndex=null;e.dataTransfer.setData("application/x-elp-run",String(i));e.dataTransfer.effectAllowed="move";run.classList.add("dragging");};
       run.ondragend=()=>run.classList.remove("dragging");
       const tools=elt("div","elp-tools");
+      tools.onpointerenter=()=>{model.toolbarIndex=i;};
       tools.append(
         tool("+1",manual?"Add one complete group":"Add one motif",()=>updateCount(i,1),repeat>=5000),
         tool("−1",manual?"Remove one complete group":"Remove one motif",()=>updateCount(i,-1)),
         tool("⫽",manual?"Split group repetitions or ungroup motifs":"Split motif block",()=>split(i),!manual&&repeat<2),
-        tool("×",manual?"Delete entire group":"Delete motif block",()=>{const blocks=copy();blocks.splice(i,1);commit(blocks);})
+        tool("×",manual?"Delete entire group":"Delete motif block",()=>{model.toolbarIndex=null;const blocks=copy();blocks.splice(i,1);commit(blocks);})
       );
       const number=elt("input","elp-num");number.type="number";number.min="1";number.max="5000";number.value=String(repeat);
       number.title=manual?"Complete-group repetitions":"Motif repetitions";
       number.onclick=e=>e.stopPropagation();
+      number.onfocus=()=>{model.toolbarIndex=i;};
       number.ondragstart=e=>e.stopPropagation();
       number.onchange=()=>{
         const next=Number(number.value);
