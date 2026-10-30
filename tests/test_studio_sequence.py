@@ -8,7 +8,7 @@ from calvados_library_builder.studio_sequence import (
     default_groups, extract_single_fasta, groups_to_architecture,
     groups_to_sequence, load_custom_motifs, normalize_groups,
     save_custom_motifs, segment_raw_sequence, load_draft, save_draft,
-    make_manual_group, set_group_repeats, ungroup_manual_block,
+    make_manual_group, set_group_repeats, ungroup_manual_block, count_motifs,
 )
 
 
@@ -97,7 +97,7 @@ def test_reject_corrupt_or_oversized_groups():
     motifs = get_default_motifs()
     with pytest.raises(ValueError, match="Unknown motif"):
         groups_to_sequence([{"segments": [{"motif": "UNKNOWN", "count": 1}]}], motifs)
-    with pytest.raises(ValueError, match="Repeat count"):
+    with pytest.raises(ValueError, match="Motif count"):
         groups_to_sequence([{"segments": [{"motif": "VPGVG", "count": 0}]}], motifs)
 
 
