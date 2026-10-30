@@ -41,8 +41,16 @@ from calvados_library_builder.studio_sequence import (
 
 
 st.set_page_config(page_title="ELP Studio", page_icon="🧬", layout="wide")
-st.title("ELP Studio")
-st.caption("Design a protein • simulate with CALVADOS • inspect molecular behaviour")
+# Optional artwork extracted from the user's original scanned PDF.
+# Place the PNG in assets/elp_header.png; the dashboard stays functional without it.
+header_art = Path(__file__).resolve().parent / "assets" / "elp_header.png"
+header_title, header_illustration = st.columns([5, 2], vertical_alignment="center")
+with header_title:
+    st.title("ELP Studio")
+    st.caption("Design a protein • simulate with CALVADOS • inspect molecular behaviour")
+with header_illustration:
+    if header_art.is_file():
+        st.image(str(header_art), width=250)
 st.markdown(
     """
     <style>
