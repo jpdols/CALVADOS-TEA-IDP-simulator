@@ -857,6 +857,7 @@ def start_run(
             stdin=subprocess.DEVNULL,
 
             creationflags=creationflags,
+            start_new_session=(os.name != "nt"),
         )
 
     except Exception:
@@ -976,4 +977,60 @@ def refresh_run_state(
             state.finished_at = state.finished_at or time.time()
             state.status = "failed"
             state.message = "Simulation process disappeared without an exit report; inspect run_error.log."
+    save_run_state(state)
+    return state
 
+
+def stop_run(run_dir: Path) -> RunState:
+    """Stop the entire local simulation process tree, not only the wrapper."""
+    import signal
+
+    run_dir = Path(run_dir).resolve()
+    state = load_run_state(run_dir)
+    if state.status != "running":
+        return state
+
+    if process_exists(state.pid):
+        if os.name == "nt":
+            result = subprocess.run(
+                ["taskkill", "/PID", str(state.pid), "/T", "/F"],
+                capture_output=True, text=True,
+            )
+            if result.returncode != 0 and process_exists(state.pid):
+                raise RuntimeError(f"Unable to stop simulation: {result.stderr.strip()}")
+        else:
+            # start_run creates an independent session for the worker and child.
+            os.killpg(state.pid, signal.SIGTERM)
+
+    state.status = "stopped"
+    state.finished_at = time.time()
+    state.message = "Simulation stopped by user."
+    save_run_state(state)
+    return state
+
+
+def get_run_summary(run_dir: Path) -> dict:
+    """Return status, timing, progress and log paths for the Streamlit UI."""
+    state = refresh_run_state(run_dir)
+    elapsed = get_elapsed_seconds(state)
+    remaining = estimate_remaining_seconds(state)
+    total = estimate_total_seconds(state)
+    trajectory = find_trajectory(Path(state.run_dir))
+    return {
+        "status": state.status,
+        "return_code": state.return_code,
+        "pid": state.pid,
+        "completed_frames": state.completed_frames,
+        "expected_frames": state.expected_frames,
+        "progress_fraction": get_progress_fraction(state),
+        "elapsed_seconds": elapsed,
+        "elapsed_text": format_duration(elapsed),
+        "remaining_seconds": remaining,
+        "remaining_text": format_duration(remaining),
+        "estimated_total_seconds": total,
+        "estimated_total_text": format_duration(total),
+        "message": state.message,
+        "trajectory_path": str(trajectory) if trajectory else None,
+        "log_path": str(get_log_path(Path(state.run_dir))),
+        "error_log_path": str(get_error_log_path(Path(state.run_dir))),
+    }
