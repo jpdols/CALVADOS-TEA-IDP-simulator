@@ -959,26 +959,26 @@ with settings_col2:
 
 with settings_col3:
 
-    platform_options = ["CPU", "CUDA"]
-
-    platform_index = (
-        platform_options.index(
-            DEFAULT_PLATFORM
-        )
-        if DEFAULT_PLATFORM
-        in platform_options
-        else 0
-    )
+    detected_platforms = available_platforms()
+    platform_options = [
+        candidate for candidate in ("CPU", "CUDA")
+        if candidate in detected_platforms
+    ]
+    if not platform_options:
+        st.error("Neither CPU nor CUDA is available in this OpenMM installation.")
+        platform_options = ["CPU"]
 
     platform = st.selectbox(
         "Platform",
         platform_options,
-        index=platform_index,
+        index=(
+            platform_options.index(DEFAULT_PLATFORM)
+            if DEFAULT_PLATFORM in platform_options else 0
+        ),
     )
-    detected_platforms = available_platforms()
     st.caption("OpenMM platforms detected: " + ", ".join(detected_platforms))
-    if platform not in detected_platforms:
-        st.warning(f"{platform} platform is not available in this OpenMM installation.")
+    if "CUDA" not in detected_platforms:
+        st.caption("CUDA cannot be selected because OpenMM does not detect it.")
 
 
 # ============================================================
@@ -1650,6 +1650,22 @@ def render_live_monitor():
                 f"**Error log:** "
                 f"`{current['error_log_path']}`"
             )
+
+    if batch.status in {"failed", "stopped"}:
+        st.error(
+            "One or more simulations failed or were stopped. "
+            "Inspect the simulation's run_error.log and run.log files."
+        )
+        for item in batch.items:
+            if item.status == "failed":
+                error_file = Path(item.run_dir) / "run_error.log"
+                st.write(f"**Failed: {item.name}**")
+                st.code(str(error_file))
+                if error_file.exists():
+                    lines = error_file.read_text(
+                        encoding="utf-8", errors="replace"
+                    ).splitlines()
+                    st.code("\n".join(lines[-35:]) or "(empty error log)")
 
     if batch.status == "finished":
 
