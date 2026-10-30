@@ -22,6 +22,7 @@ from pathlib import Path
 RUNNER_STATE_FILENAME = "runner_state.json"
 RUNNER_LOG_FILENAME = "run.log"
 RUNNER_STDERR_FILENAME = "run_error.log"
+RUNNER_EXIT_FILENAME = "runner_exit_code.txt"
 
 
 # ============================================================
@@ -751,9 +752,11 @@ def start_run(
     )
 
     command = [
-        sys.executable,
-        run_script.name,
+        sys.executable, "-m", "calvados_library_builder.run_worker",
+        str(run_script),
+        str(run_dir / RUNNER_EXIT_FILENAME),
     ]
+    (run_dir / RUNNER_EXIT_FILENAME).unlink(missing_ok=True)
 
 
     log_handle = open(
@@ -951,50 +954,26 @@ def refresh_run_state(
 
     if state.status == "running":
 
-        alive = (
-            process_exists(
-                state.pid
-            )
-        )
-
-        if not alive:
-
-            state.finished_at = (
-                state.finished_at
-                or time.time()
-            )
-
-
-            # ------------------------------------------------
-            # At this stage we only know the process ended.
-            #
-            # Since Streamlit does not retain the original
-            # Popen object between reruns, we cannot reliably
-            # query its return code here.
-            # ------------------------------------------------
-
-            if (
-                state.expected_frames
-                is not None
-                and state.completed_frames
-                >= state.expected_frames
-            ):
-
-                state.status = (
-                    "finished"
-                )
-
-                state.message = (
-                    "Simulation completed."
-                )
-
-            else:
-
-                state.status = (
-                    "finished"
-                )
-
-                state.message = (
-                    "Simulation process ended."
-                )
+        alive = process_exists(state.pid)
+        exit_path = run_dir / RUNNER_EXIT_FILENAME
+        if exit_path.exists():
+            try:
+                state.return_code = int(exit_path.read_text(encoding="utf-8").strip())
+            except ValueError:
+                state.return_code = None
+            state.finished_at = state.finished_at or time.time()
+            if state.status != "stopped":
+                if state.return_code == 0 and (
+                    state.expected_frames is None
+                    or state.completed_frames >= state.expected_frames
+                ):
+                    state.status = "finished"
+                    state.message = "Simulation completed successfully."
+                else:
+                    state.status = "failed"
+                    state.message = f"Simulation exited with code {state.return_code}; completed {state.completed_frames}/{state.expected_frames} frames."
+        elif not alive:
+            state.finished_at = state.finished_at or time.time()
+            state.status = "failed"
+            state.message = "Simulation process disappeared without an exit report; inspect run_error.log."
 
