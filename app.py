@@ -623,5 +623,4 @@ with analyze_tab:
         st.caption("Analyze one or more trajectories to see cross-sequence comparisons here.")
 
 st.divider()
-st.caption("Original detailed designer: run `python -m streamlit run legacy_app.py`. "
-           "Simulation rates from short trajectories are descriptive, not equilibrium estimates.")
+st.caption("Simulation rates from short trajectories are descriptive, not equilibrium estimates.")
