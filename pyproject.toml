@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "calvados-tea-idp-simulator"
+version = "0.1.0"
+description = "Motif-based ELP/IDP design and CALVADOS simulation preparation"
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+  "numpy",
+  "pandas",
+  "calvados @ git+https://github.com/KULL-Centre/CALVADOS.git@main",
+]
+
+[project.optional-dependencies]
+app = ["streamlit>=1.45", "plotly"]
+analysis = ["MDAnalysis", "openpyxl", "matplotlib"]
+dev = ["pytest", "ruff"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
