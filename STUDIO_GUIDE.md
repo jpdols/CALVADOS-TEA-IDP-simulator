@@ -173,3 +173,54 @@ The editor uses Streamlit bidirectional custom components, without adding
 npm, Node.js or Python runtime dependencies. GitHub CI uses Node.js only
 to syntax-check the embedded JavaScript. The actual hover/drag experience
 must be verified in a browser.
+
+## Bulk-import libraries, simulation help and PDF comparison
+
+The Design tab keeps the one-ball-per-block editor for single ELPs. To
+prepare an existing library without building it manually, use **Import a
+sequence library**. Upload a multi-record FASTA file, or a CSV with columns
+`name,sequence`. Pasting multi-FASTA is also supported. The old experimental
+two-motif composition generator has been removed from the main app. The
+importer validates amino-acid codes and duplicate names, then queues one
+single-chain simulation per imported sequence under the selected experiment.
+
+Example multi-FASTA:
+
+```fasta
+>ELP_01
+VPGVGVPGVGVPGVG
+>ELP_02
+VPGVGAVTGRGDSPASSVPGVG
+```
+
+Each simulation parameter now has a hover-help icon explaining its unit,
+purpose and impact: temperature, compute backend, saved frames, steps per
+frame, box size, pH, ionic strength and initial random seed.
+
+### Typeface
+
+The Streamlit app and the motif canvas request **Suisse Intl / Suisse** as
+their preferred system font. Due to licensing, **no font files are
+distributed**. If neither font is installed on your laptop, the UI falls
+back to Helvetica Neue or Arial. For consistent visuals on another computer,
+install Suisse using your own valid font licence.
+
+### Analysis PDF
+
+After analyzing at least one trajectory, open **Analyze → Compare analyzed
+sequences → Generate comparison PDF**. The downloadable landscape report has
+one colored ball (with `×N` repeat count) per contiguous motif run, a table
+of results next to each sequence, and comparative vector charts for:
+
+- fraction collapsed;
+- mean Rg (nm);
+- mean compact Rg (nm);
+- collapse rate (ns⁻¹);
+- escape rate (ns⁻¹).
+
+Figures use the saved sequence and thesis motif colors. Existing
+`analysis/summary.csv` files are the source of numerical values; not-yet-
+analyzed sequences cannot be included. Rates based on short, non-equilibrated
+runs should not be treated as reliable equilibrium properties.
+
+Credits: **Created by Joep Dols · Nikolina Šoštarić Lab · TU Delft**.
