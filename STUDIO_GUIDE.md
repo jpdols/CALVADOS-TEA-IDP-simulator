@@ -117,3 +117,37 @@ integrator are untouched. The helper does nothing on Linux.
 **Do not restart a failed folder blindly.** Existing trajectories and
 checkpoints may represent different integration steps. Leave older folders
 alone and use a new experiment name for the next short smoke test.
+
+## Motif-based custom sequence canvas
+
+The Design tab now opens with a **single custom ELP** and a colored,
+bidirectional, draggable sequence editor. The six built-in motifs retain the
+exact thesis colors from `motifs.py`:
+
+| Motif | Color |
+| --- | --- |
+| VPGVG | `#4C78A8` |
+| IPAVG | `#F2CF5B` |
+| VPGIG | `#54A24B` |
+| VPGKG | `#C13CFF` |
+| VPGEG | `#F28E2B` |
+| VPAVG | `#FF66B3` |
+
+Click a palette motif to add it to the end, drag groups **between** others
+to reorder, or drag one group **onto** another to join them. Select a group
+to edit its motif or repeats, delete it, or ungroup/split it. A group can
+contain several different motifs. Exact amino-acid order is generated from
+these groups and is what the Prepare button sends to CALVADOS.
+
+The collapsed **Motif palette** editor adds new name/sequence/HEX-color
+triples, persisted in `runs/_custom_motifs.json`. Default motif names/colors
+cannot be overridden. Pasting a FASTA in the optional import panel matches
+known motifs with longest-first priority, keeping unrecognized stretches as
+editable grey fragments rather than dropping residues.
+
+Two-motif library generation remains available under an optional expander;
+it does not replace the draggable single-ELP editor.
+
+This uses Streamlit v2 custom components (supported by the installed 1.66
+release), with bidirectional state changes. It is fully self-contained:
+no Node, npm, or additional Python package is required.
