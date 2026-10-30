@@ -118,36 +118,58 @@ integrator are untouched. The helper does nothing on Linux.
 checkpoints may represent different integration steps. Leave older folders
 alone and use a new experiment name for the next short smoke test.
 
-## Motif-based custom sequence canvas
+## Bracketed mono-motif editor and autosaved motifs
 
-The Design tab now opens with a **single custom ELP** and a colored,
-bidirectional, draggable sequence editor. The six built-in motifs retain the
-exact thesis colors from `motifs.py`:
+The Design page always displays a draggable row of colored motif balls.
+**Consecutive identical motifs appear inside one bracket with a ×N label.**
+Adjacent identical runs merge automatically; changing order can therefore
+merge two blocks without changing the underlying sequence. Drag a block
+between others or drop it on the left/right half of another block.
 
-| Motif | Color |
-| --- | --- |
-| VPGVG | `#4C78A8` |
-| IPAVG | `#F2CF5B` |
-| VPGIG | `#54A24B` |
-| VPGKG | `#C13CFF` |
-| VPGEG | `#F28E2B` |
-| VPAVG | `#FF66B3` |
+Hover a block (or focus it using the keyboard) to reveal a floating toolbar:
 
-Click a palette motif to add it to the end, drag groups **between** others
-to reorder, or drag one group **onto** another to join them. Select a group
-to edit its motif or repeats, delete it, or ungroup/split it. A group can
-contain several different motifs. Exact amino-acid order is generated from
-these groups and is what the Prepare button sends to CALVADOS.
+- **+1** adds one copy of that motif.
+- **−1** removes one copy; it removes the block at 1.
+- **Split** divides a run into two separately draggable parts.
+- **×** deletes the entire motif run.
+- The count field edits any run's repeat count directly.
 
-The collapsed **Motif palette** editor adds new name/sequence/HEX-color
-triples, persisted in `runs/_custom_motifs.json`. Default motif names/colors
-cannot be overridden. Pasting a FASTA in the optional import panel matches
-known motifs with longest-first priority, keeping unrecognized stretches as
-editable grey fragments rather than dropping residues.
+A split creates an *explicit temporary boundary* between two adjacent
+identical motif runs so one part can be dragged away. After reordering,
+adjacent identical runs merge again. All actions update the exact sequence
+used for FASTA export and CALVADOS preparation.
 
-Two-motif library generation remains available under an optional expander;
-it does not replace the draggable single-ELP editor.
+### Standard palette
 
-This uses Streamlit v2 custom components (supported by the installed 1.66
-release), with bidirectional state changes. It is fully self-contained:
-no Node, npm, or additional Python package is required.
+| Motif | Full amino-acid sequence | Color |
+| --- | --- | --- |
+| VPGVG | VPGVG | `#4C78A8` |
+| IPAVG | IPAVG | `#F2CF5B` |
+| VPGIG | VPGIG | `#54A24B` |
+| VPGKG | VPGKG | `#C13CFF` |
+| VPGEG | VPGEG | `#F28E2B` |
+| VPAVG | VPAVG | `#FF66B3` |
+| RGD block | AVTGRGDSPASS | `#7944AC` |
+
+The RGD purple is matched to the user-supplied color reference.
+The existing six colors remain unchanged.
+
+### Persistence between app sessions
+
+New motifs (name, sequence, HEX color) are saved to
+`runs/_custom_motifs.json`; they are automatically loaded on app restart.
+Built-in motif entries cannot be replaced by custom motifs. The **current
+sequence name, ordered blocks, counts and explicit splits** are also saved,
+to `runs/_current_elp_draft.json`. The last valid draft is restored
+automatically after the application restarts.
+
+Both files live under the user's existing `runs` folder. Keep them in
+backups if custom motifs and the last draft should be preserved.
+
+Pasting a FASTA still detects known motifs and creates grey fragments for
+unmatched amino acids. The optional two-motif library generator is unchanged.
+
+The editor uses Streamlit bidirectional custom components, without adding
+npm, Node.js or Python runtime dependencies. GitHub CI uses Node.js only
+to syntax-check the embedded JavaScript. The actual hover/drag experience
+must be verified in a browser.
