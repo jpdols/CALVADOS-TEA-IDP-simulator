@@ -67,21 +67,18 @@ def _draw_architecture(ax, sequence: str, motifs: dict[str, Motif], x: float, y:
     if not runs:
         ax.text(x, y, "No sequence", transform=ax.transAxes, fontsize=7, color="#666")
         return
-    shown = runs[:18]
-    units = sum(min(4, count) + 0.75 for _, count in shown)
-    dx = min(0.017, max_width / max(1, units))
+    shown = runs[:16]
+    step = min(0.025, max_width / max(1, len(shown)))
     cursor = x
     for label, count in shown:
         color = motifs[label].color if label in motifs else "#AAAAAA"
-        for _ in range(min(4, count)):
-            ax.add_patch(Circle((cursor + dx * 0.45, y), dx * .34,
-                                color=color, ec="#FFFFFF", lw=.3,
-                                transform=ax.transAxes, clip_on=False))
-            cursor += dx
-        ax.text(cursor - dx*.35, y - .025, f"×{count}",
-                ha="center", va="top", fontsize=6.2,
+        ax.add_patch(Circle((cursor + step*.46, y), min(step*.28, .008),
+                            color=color, ec="#FFFFFF", lw=.35,
+                            transform=ax.transAxes, clip_on=False))
+        ax.text(cursor + step*.46, y - .019, f"×{count}",
+                ha="center", va="top", fontsize=6.4,
                 transform=ax.transAxes, color="#444")
-        cursor += dx*.75
+        cursor += step
     if len(runs) > len(shown):
         ax.text(min(x+max_width, cursor), y, f"+{len(runs)-len(shown)} blocks",
                 fontsize=6.5, transform=ax.transAxes, color="#555")
