@@ -249,12 +249,12 @@ with simulate_tab:
                         st.error(str(exc))
                 for filename in ("run.log", "run_error.log"):
                     logfile = Path(item.run_dir) / filename
-                    with st.expander(filename):
-                        if logfile.exists():
-                            lines = logfile.read_text(encoding="utf-8", errors="replace").splitlines()
-                            st.code("\n".join(lines[-60:]) or "(empty)", language="text")
-                        else:
-                            st.caption("No file yet")
+                    st.markdown(f"**{filename}**")
+                    if logfile.exists():
+                        lines = logfile.read_text(encoding="utf-8", errors="replace").splitlines()
+                        st.code("\n".join(lines[-60:]) or "(empty)", language="text")
+                    else:
+                        st.caption("No file yet")
     # A fragment continues polling and advancing sequential batches without
     # restarting the entire designer or requiring a manual browser refresh.
     @st.fragment(run_every="5s")
