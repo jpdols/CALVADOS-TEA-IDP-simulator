@@ -16,9 +16,9 @@ def test_default_colors_and_single_sequence():
     assert motifs["VPGVG"].color == "#4C78A8"
     assert motifs["IPAVG"].color == "#F2CF5B"
     assert motifs["VPGIG"].color == "#54A24B"
-    assert motifs["VPGKG"].color == "#C13CFF"
+    assert motifs["VPGKG"].color == "#FF66B3"
     assert motifs["VPGEG"].color == "#F28E2B"
-    assert motifs["VPAVG"].color == "#FF66B3"
+    assert motifs["VPAVG"].color == "#20B8B0"
     assert groups_to_sequence(default_groups(), motifs) == "VPGVG" * 10
     assert motifs["RGD"].color == "#7944AC"
     assert motifs["RGD"].sequence == "AVTGRGDSPASS"
