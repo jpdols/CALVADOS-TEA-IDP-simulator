@@ -998,3 +998,26 @@ def build_design_html(
 
 # ============================================================
 # Streamlit renderer
+
+def render_sequence_design(
+    design: SequenceDesign,
+    motifs: dict[str, Motif],
+    show_labels: bool = True,
+    compact: bool = False,
+    show_legend: bool = True,
+    max_blocks: int | None = None,
+) -> None:
+    """Render a motif architecture in the Streamlit page.
+
+    Uses st.html rather than st.markdown so the CSS/HTML visualizer is
+    displayed as markup, not escaped text.
+    """
+    html = build_design_html(
+        design=design,
+        motifs=motifs,
+        show_labels=show_labels,
+        compact=compact,
+        show_legend=show_legend,
+        max_blocks=max_blocks,
+    )
+    st.html(html)
