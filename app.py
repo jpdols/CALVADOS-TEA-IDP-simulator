@@ -47,7 +47,7 @@ header_art = Path(__file__).resolve().parent / "assets" / "elp_header.jpg"
 header_title, header_illustration = st.columns([5, 2], vertical_alignment="center")
 with header_title:
     st.title("ELP Studio")
-    st.caption("Design a protein • simulate with CALVADOS • inspect molecular behaviour")
+    st.caption("Design an IDP/ELP • simulate using CALVADOS-TEA • analyze results")
 with header_illustration:
     if header_art.is_file():
         st.image(str(header_art), width=250)
