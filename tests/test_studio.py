@@ -33,7 +33,8 @@ def test_library_keeps_composition_and_seed():
 
 
 def test_rg_theta_reference_and_rates():
-    assert theta_rg(420) == pytest.approx((2 * 0.40 * 0.38 * 419 / 6) ** 0.5)\n    assert theta_rg(420) == pytest.approx(4.60753, abs=0.001)
+    assert theta_rg(420) == pytest.approx((2 * 0.40 * 0.38 * 419 / 6) ** 0.5)
+    assert theta_rg(420) == pytest.approx(4.60753, abs=0.001)
     # expanded, expanded, compact, compact, expanded; one flip each way
     result = summarize_rg([5, 5, 3, 3, 5], 0.01, 4.0)
     assert result["fraction_collapsed"] == pytest.approx(.4)
