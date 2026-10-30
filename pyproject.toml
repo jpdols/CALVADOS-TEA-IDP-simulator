@@ -1,23 +1,39 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "calvados-tea-idp-simulator"
-version = "0.1.0"
-description = "Motif-based ELP/IDP design and CALVADOS simulation preparation"
+version = "0.2.0"
+description = "Local ELP/IDP sequence designer and CALVADOS simulation manager"
 readme = "README.md"
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.11,<3.14"
+# CALVADOS v0.9.1 upstream requirements, as declared in its pyproject.toml
+# at the pinned source revision below (accessed 2026-10-30).
+# Upstream requests the CUDA 12 OpenMM extra even when a CPU platform is selected;
+# the app itself can run with CPU or CUDA, depending on local platform availability.
 dependencies = [
-  "numpy",
-  "pandas",
-  "calvados @ git+https://github.com/KULL-Centre/CALVADOS.git@main",
+    "calvados @ git+https://github.com/KULL-Centre/CALVADOS.git@df7d12a3428a0151a9c4683e1300e086d67d8fa5",
+    "openmm[cuda12]>=8.2,<8.5",
+    "MDAnalysis>=2.9,<2.11",
+    "mdtraj>=1.11,<1.12",
+    "numpy",
+    "pandas",
+    "biopython",
+    "Jinja2",
+    "tqdm",
+    "matplotlib",
+    "PyYAML",
+    "pydantic>=2,<3",
+    "statsmodels",
+    "numba",
+    "scipy",
 ]
 
 [project.optional-dependencies]
-app = ["streamlit>=1.45", "plotly"]
-analysis = ["MDAnalysis", "openpyxl", "matplotlib"]
-dev = ["pytest", "ruff"]
+app = ["streamlit>=1.52", "plotly"]
+analysis = ["openpyxl"]
+dev = ["pytest>=7,<9", "pytest-cov>=4,<8", "ruff>=0.17,<1"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
