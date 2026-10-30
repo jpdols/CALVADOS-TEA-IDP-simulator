@@ -1,1719 +1,358 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+"""CALVADOS ELP Studio — design, simulate and analyze without a long configuration form.
 
+Advanced original UI: streamlit run legacy_app.py
+"""
 from __future__ import annotations
 
-import re
 from pathlib import Path
+import re
 
+import pandas as pd
 import streamlit as st
 
-from calvados_library_builder.architecture_editor import (
-    architecture_editor,
-    blocks_to_design,
-    get_block_statistics,
-    sanitize_blocks,
+from calvados_library_builder.analysis import (
+    THETA_REF_NM, analyze_run, locate_files, theta_rg,
 )
 from calvados_library_builder.batch import (
-    add_simulation,
-    advance_batch,
-    create_batch,
-    estimate_batch_remaining_seconds,
-    get_batch_counts,
-    get_batch_progress,
-    get_current_summary,
-    load_batch,
-    remove_simulation,
-    start_batch,
+    add_simulation, advance_batch, create_batch, get_batch_counts,
+    load_batch, start_batch,
 )
-from calvados_library_builder.config import (
-    DEFAULT_BOX_SIZE,
-    DEFAULT_IONIC_STRENGTH,
-    DEFAULT_N_FRAMES,
-    DEFAULT_PH,
-    DEFAULT_PLATFORM,
-    DEFAULT_SAVE_EVERY,
-    DEFAULT_TEMPERATURE,
-    RUNS_DIR,
-    SimulationConfig,
-)
-from calvados_library_builder.motifs import (
-    Motif,
-    add_motif,
-    create_motif,
-    get_default_motifs,
-)
-from calvados_library_builder.prepare import prepare_simulation
-from calvados_library_builder.runner import format_duration, stop_run
+from calvados_library_builder.config import RUNS_DIR, SimulationConfig
+from calvados_library_builder.designs import Candidate, make_library, simple_elp, validate_sequence
 from calvados_library_builder.diagnostics import available_platforms
-from calvados_library_builder.visualization import render_sequence_design
+from calvados_library_builder.preflight import inspect_run
+from calvados_library_builder.prepare import prepare_simulation
+from calvados_library_builder.runner import get_run_summary, stop_run
 
 
-# ============================================================
-# Page
-# ============================================================
+st.set_page_config(page_title="ELP Studio", page_icon="🧬", layout="wide")
+st.title("ELP Studio")
+st.caption("Design a protein • simulate with CALVADOS • inspect molecular behaviour")
 
-st.set_page_config(
-    page_title="CALVADOS Library Builder",
-    page_icon="🧬",
-    layout="wide",
-)
-
-st.title("CALVADOS Library Builder")
-
-st.caption(
-    "Build ELP-like sequences from motif building blocks, "
-    "edit their architecture interactively and run CALVADOS locally."
-)
+ROOT = RUNS_DIR
+ROOT.mkdir(parents=True, exist_ok=True)
+platforms = available_platforms()
+choices = [p for p in ("CPU", "CUDA") if p in platforms]
+if not choices:
+    choices = ["CPU"]
 
 
-# ============================================================
-# Session state
-# ============================================================
-
-if "motifs" not in st.session_state:
-    st.session_state["motifs"] = get_default_motifs()
-
-if "architecture_blocks" not in st.session_state:
-    st.session_state["architecture_blocks"] = []
-
-if "architecture_revision" not in st.session_state:
-    st.session_state["architecture_revision"] = 0
-
-if "active_batch_dir" not in st.session_state:
-    st.session_state["active_batch_dir"] = None
-
-if "last_added_name" not in st.session_state:
-    st.session_state["last_added_name"] = None
-
-motifs: dict[str, Motif] = st.session_state["motifs"]
+def safe_label(value: str) -> str:
+    label = re.sub(r"[^A-Za-z0-9_.-]+", "_", value.strip()).strip("._")
+    if not label:
+        raise ValueError("Enter a valid name.")
+    return label
 
 
-# ============================================================
-# General helpers
-# ============================================================
-
-def clean_aa_sequence(sequence: str) -> str:
-    return (
-        sequence
-        .replace(" ", "")
-        .replace("\n", "")
-        .replace("\r", "")
-        .replace("\t", "")
-        .upper()
-    )
+def batch_paths() -> list[Path]:
+    return sorted(ROOT.glob("*/batch_state.json"), reverse=True)
 
 
-def sanitize_folder_name(name: str) -> str:
-    name = name.strip()
-
-    name = re.sub(
-        r'[<>:"/\\|?*]',
-        "_",
-        name,
-    )
-
-    name = re.sub(
-        r"\s+",
-        "_",
-        name,
-    )
-
-    name = re.sub(
-        r"_+",
-        "_",
-        name,
-    )
-
-    return name.strip("._ ")
+def run_paths() -> list[Path]:
+    found = {p.parent for p in ROOT.glob("*/*/config.yaml")}
+    found.update(p.parent for p in ROOT.glob("*/config.yaml"))
+    return sorted(found, key=lambda p: str(p).lower())
 
 
-def get_batch_directory(batch_name: str) -> Path:
-    safe_name = sanitize_folder_name(batch_name)
-
-    if not safe_name:
-        raise ValueError(
-            "Run name cannot be empty."
-        )
-
-    return (
-        RUNS_DIR
-        / safe_name
-    ).resolve()
+def choose_batch_name(value: str) -> Path:
+    return ROOT / safe_label(value)
 
 
-def get_active_batch():
-    batch_dir = st.session_state.get(
-        "active_batch_dir"
-    )
-
-    if not batch_dir:
-        return None
-
-    batch_dir = Path(batch_dir)
-
-    state_file = (
-        batch_dir
-        / "batch_state.json"
-    )
-
-    if not state_file.exists():
-        return None
-
-    try:
-        return load_batch(
-            batch_dir
-        )
-
-    except Exception:
-        return None
+def load_or_create_batch(name: str):
+    directory = choose_batch_name(name)
+    return load_batch(directory) if (directory / "batch_state.json").exists() else create_batch(name, directory)
 
 
-def get_or_create_batch(
-    batch_name: str,
-):
-    batch_dir = get_batch_directory(
-        batch_name
-    )
-
-    state_path = (
-        batch_dir
-        / "batch_state.json"
-    )
-
-    if state_path.exists():
-        batch = load_batch(
-            batch_dir
-        )
-
-    else:
-        batch = create_batch(
-            name=batch_name.strip(),
-            batch_dir=batch_dir,
-        )
-
-    st.session_state[
-        "active_batch_dir"
-    ] = str(batch_dir)
-
-    return batch
-
-
-# ============================================================
-# Architecture helpers
-# ============================================================
-
-def refresh_architecture_component() -> None:
-    """
-    Force the frontend architecture component to be recreated.
-
-    This is useful when blocks are changed externally,
-    for example through Add or Clear.
-    """
-
-    st.session_state[
-        "architecture_revision"
-    ] += 1
-
-
-def get_current_blocks() -> list[dict]:
-    return sanitize_blocks(
-        blocks=st.session_state[
-            "architecture_blocks"
-        ],
-        motifs=st.session_state[
-            "motifs"
-        ],
-    )
-
-
-def set_current_blocks(
-    blocks: list[dict],
-    *,
-    refresh_editor: bool = False,
-) -> None:
-    st.session_state[
-        "architecture_blocks"
-    ] = sanitize_blocks(
-        blocks=blocks,
-        motifs=st.session_state[
-            "motifs"
-        ],
-    )
-
-    if refresh_editor:
-        refresh_architecture_component()
-
-
-def add_building_block(
-    motif_name: str,
-    count: int,
-) -> None:
-    """
-    Add a motif building block to the end of the architecture.
-
-    If the final block already contains the same motif,
-    increase its count instead of making another adjacent block.
-    """
-
-    count = max(
-        1,
-        int(count),
-    )
-
-    blocks = get_current_blocks()
-
-    if (
-        blocks
-        and blocks[-1]["motif"] == motif_name
-    ):
-        blocks[-1]["count"] += count
-
-    else:
-        blocks.append(
+def preview(candidates: list[Candidate]) -> None:
+    st.caption(f"{len(candidates)} sequence(s) generated")
+    st.dataframe(
+        pd.DataFrame([
             {
-                "motif": motif_name,
-                "count": count,
+                "Name": c.name,
+                "Architecture": c.architecture,
+                "Length (aa)": len(c.sequence),
+                "Sequence preview": c.sequence[:60] + ("…" if len(c.sequence) > 60 else ""),
             }
-        )
-
-    set_current_blocks(
-        blocks,
-        refresh_editor=True,
+            for c in candidates
+        ]), use_container_width=True, hide_index=True,
     )
 
 
-def clear_architecture() -> None:
-    st.session_state[
-        "architecture_blocks"
-    ] = []
-
-    refresh_architecture_component()
-
-
-def reset_motif_library() -> None:
-    st.session_state[
-        "motifs"
-    ] = get_default_motifs()
-
-    # Remove blocks referring to custom motifs that
-    # no longer exist after the reset.
-    st.session_state[
-        "architecture_blocks"
-    ] = sanitize_blocks(
-        blocks=st.session_state[
-            "architecture_blocks"
-        ],
-        motifs=st.session_state[
-            "motifs"
-        ],
-    )
-
-    refresh_architecture_component()
-
-
-# ============================================================
-# 1. Sequence design
-# ============================================================
-
-st.header(
-    "1. Sequence design"
+design_tab, simulate_tab, analyze_tab = st.tabs(
+    ["1  Design", "2  Simulate", "3  Analyze"]
 )
 
-name_col, mode_col = st.columns(
-    [2, 1]
-)
-
-with name_col:
-    sequence_name = st.text_input(
-        "Sequence / simulation name",
-        value="test_sequence",
+with design_tab:
+    st.subheader("Build a single ELP or a library")
+    kind = st.radio(
+        "What would you like to make?",
+        ["One repeated motif", "One custom sequence", "Two-motif library"],
+        horizontal=True,
     )
-
-with mode_col:
-    input_mode = st.selectbox(
-        "Input mode",
-        [
-            "Motif builder",
-            "Custom amino-acid sequence",
-        ],
-    )
-
-clean_sequence = ""
-current_design = None
-
-
-# ============================================================
-# LEGO motif builder
-# ============================================================
-
-if input_mode == "Motif builder":
-
-    motifs = st.session_state[
-        "motifs"
-    ]
-
-    # ========================================================
-    # Building block library
-    # ========================================================
-
-    st.subheader(
-        "Building blocks"
-    )
-
-    st.caption(
-        "Choose how many copies of a motif you want and press Add. "
-        "If the final architecture block is already the same motif, "
-        "the new copies are added to that block."
-    )
-
-    motif_items = list(
-        motifs.items()
-    )
-
-    columns_per_row = 3
-
-    for row_start in range(
-        0,
-        len(motif_items),
-        columns_per_row,
-    ):
-
-        row_items = motif_items[
-            row_start:
-            row_start + columns_per_row
-        ]
-
-        row_columns = st.columns(
-            columns_per_row
-        )
-
-        for column, (
-            motif_name,
-            motif,
-        ) in zip(
-            row_columns,
-            row_items,
-        ):
-
-            with column:
-
-                st.html(
-                    f"""
-<div style="
-    border: 1px solid rgba(128,128,128,0.22);
-    border-radius: 12px;
-    padding: 12px;
-    margin-bottom: 7px;
-">
-    <div style="
-        display: flex;
-        align-items: center;
-        gap: 9px;
-        margin-bottom: 3px;
-    ">
-        <span style="
-            display: inline-block;
-            width: 22px;
-            height: 22px;
-            border-radius: 50%;
-            background: {motif.color};
-            border: 1px solid rgba(0,0,0,0.18);
-            flex-shrink: 0;
-        ">
-        </span>
-
-        <strong>
-            {motif.display_label}
-        </strong>
-    </div>
-
-    <div style="
-        opacity: 0.62;
-        font-size: 0.78rem;
-        margin-left: 31px;
-    ">
-        {motif.sequence} · {motif.length} aa
-    </div>
-</div>
-"""
-                )
-
-                count_key = (
-                    f"builder_count_{motif_name}"
-                )
-
-                add_key = (
-                    f"builder_add_{motif_name}"
-                )
-
-                motif_add_count = st.number_input(
-                    "Count",
-                    min_value=1,
-                    value=1,
-                    step=1,
-                    key=count_key,
-                )
-
-                if st.button(
-                    f"Add {motif.display_label}",
-                    key=add_key,
-                    use_container_width=True,
-                ):
-
-                    add_building_block(
-                        motif_name=motif_name,
-                        count=int(
-                            motif_add_count
-                        ),
-                    )
-
-                    st.rerun()
-
-
-    # ========================================================
-    # Custom motif management
-    # ========================================================
-
-    with st.expander(
-        "Add or manage motifs"
-    ):
-
-        st.caption(
-            "Custom motifs immediately become available as "
-            "additional LEGO building blocks."
-        )
-
-        custom_col1, custom_col2, custom_col3 = (
-            st.columns(
-                [1, 1, 0.55]
+    candidates: list[Candidate] = []
+    if kind == "One repeated motif":
+        a, b, c = st.columns([2, 2, 1])
+        with a:
+            name = st.text_input("Sequence name", "test_vpgvg")
+        with b:
+            motif = st.selectbox(
+                "Motif", ["VPGVG", "IPAVG", "VPGIG", "VPGKG", "VPGEG", "VPAVG"]
             )
+        with c:
+            repeats = st.number_input("Repeats", 1, 2000, 10)
+        candidates = [simple_elp(safe_label(name), motif, int(repeats))]
+    elif kind == "One custom sequence":
+        name = st.text_input("Sequence name", "my_elp")
+        sequence = st.text_area(
+            "Amino acid sequence", "VPGVG" * 10,
+            help="Paste a continuous one-letter sequence; spaces and newlines are accepted.",
         )
-
-        with custom_col1:
-            custom_motif_name = st.text_input(
-                "Motif name",
-                placeholder="VPGFG",
-                key="custom_motif_name",
-            )
-
-        with custom_col2:
-            custom_motif_sequence = st.text_input(
-                "Motif sequence",
-                placeholder="VPGFG",
-                key="custom_motif_sequence",
-            )
-
-        with custom_col3:
-            custom_motif_color = st.color_picker(
-                "Color",
-                "#7F7F7F",
-                key="custom_motif_color",
-            )
-
-        custom_button_col1, custom_button_col2 = (
-            st.columns(2)
-        )
-
-        with custom_button_col1:
-
-            if st.button(
-                "Add custom motif",
-                use_container_width=True,
-            ):
-
-                try:
-                    new_motif = create_motif(
-                        name=custom_motif_name,
-                        sequence=custom_motif_sequence,
-                        color=custom_motif_color,
-                    )
-
-                    st.session_state[
-                        "motifs"
-                    ] = add_motif(
-                        motifs=motifs,
-                        motif=new_motif,
-                    )
-
-                    refresh_architecture_component()
-
-                    st.rerun()
-
-                except Exception as error:
-                    st.error(
-                        str(error)
-                    )
-
-        with custom_button_col2:
-
-            if st.button(
-                "Reset motif library",
-                use_container_width=True,
-            ):
-
-                reset_motif_library()
-
-                st.rerun()
-
-
-    # ========================================================
-    # Architecture
-    # ========================================================
-
-    st.subheader(
-        "Architecture"
-    )
-
-    architecture_action_col1, architecture_action_col2 = (
-        st.columns(
-            [4, 1]
-        )
-    )
-
-    with architecture_action_col1:
-
-        st.caption(
-            "Click = edit · double-click = split · drag = reorder. "
-            "Identical neighbouring blocks merge after structural edits."
-        )
-
-    with architecture_action_col2:
-
-        if st.button(
-            "Clear architecture",
-            use_container_width=True,
-            disabled=(
-                len(
-                    get_current_blocks()
-                )
-                == 0
-            ),
-        ):
-
-            clear_architecture()
-
-            st.rerun()
-
-
-    starting_blocks = get_current_blocks()
-
-    if starting_blocks:
-
-        editor_key = (
-            "architecture_editor_"
-            f"{st.session_state['architecture_revision']}"
-        )
-
-        edited_blocks = architecture_editor(
-            blocks=starting_blocks,
-            motifs=motifs,
-            key=editor_key,
-        )
-
-        # Editor output is the canonical architecture.
-        st.session_state[
-            "architecture_blocks"
-        ] = edited_blocks
-
         try:
-            current_design = blocks_to_design(
-                blocks=edited_blocks,
-                motifs=motifs,
-            )
-
-            clean_sequence = (
-                current_design.sequence
-            )
-
-        except Exception as error:
-
-            st.error(
-                "Could not construct sequence from "
-                f"architecture: {error}"
-            )
-
-            current_design = None
-
+            seq = validate_sequence(sequence)
+            candidates = [Candidate(safe_label(name), seq, "custom")]
+        except ValueError as exc:
+            st.warning(str(exc))
     else:
-
-        st.info(
-            "Architecture is empty. "
-            "Add a building block above to begin."
-        )
-
-
-    # ========================================================
-    # Current design statistics
-    # ========================================================
-
-    if current_design is not None:
-
-        statistics = get_block_statistics(
-            blocks=st.session_state[
-                "architecture_blocks"
-            ],
-            motifs=motifs,
-        )
-
-        st.markdown(
-            "#### Current design"
-        )
-
-        metric_col1, metric_col2, metric_col3, metric_col4 = (
-            st.columns(4)
-        )
-
-        with metric_col1:
-            st.metric(
-                "Blocks",
-                statistics[
-                    "blocks"
-                ],
+        st.caption("Keep composition constant while comparing how motif arrangement affects compaction.")
+        p1, p2, p3 = st.columns(3)
+        with p1:
+            prefix = st.text_input("Library name", "VGIP_screen")
+            motif_a = st.selectbox("Motif A", ["VPGVG", "IPAVG", "VPGIG", "VPGKG", "VPGEG", "VPAVG"])
+        with p2:
+            motif_b = st.selectbox(
+                "Motif B", ["IPAVG", "VPGVG", "VPGIG", "VPGKG", "VPGEG", "VPAVG"]
             )
-
-        with metric_col2:
-            st.metric(
-                "Motifs",
-                statistics[
-                    "total_motifs"
-                ],
-            )
-
-        with metric_col3:
-            st.metric(
-                "Sequence length",
-                f"{statistics['total_aa']} aa",
-            )
-
-        with metric_col4:
-            st.metric(
-                "Motif types",
-                len(
-                    statistics[
-                        "motif_counts"
-                    ]
-                ),
-            )
-
-
-        # ====================================================
-        # Composition
-        # ====================================================
-
-        with st.expander(
-            "Composition",
-            expanded=True,
-        ):
-
-            motif_counts = statistics[
-                "motif_counts"
-            ]
-
-            total_motifs = max(
-                1,
-                statistics[
-                    "total_motifs"
-                ],
-            )
-
-            for motif_name, count in (
-                motif_counts.items()
-            ):
-
-                motif = motifs[
-                    motif_name
-                ]
-
-                percentage = (
-                    count
-                    / total_motifs
-                    * 100.0
-                )
-
-                comp_col1, comp_col2, comp_col3 = (
-                    st.columns(
-                        [2.5, 1, 1]
-                    )
-                )
-
-                with comp_col1:
-
-                    st.html(
-                        f"""
-<div style="
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-height: 32px;
-">
-    <span style="
-        width: 15px;
-        height: 15px;
-        border-radius: 50%;
-        background: {motif.color};
-        display: inline-block;
-        border: 1px solid rgba(0,0,0,0.15);
-        flex-shrink: 0;
-    ">
-    </span>
-
-    <strong>
-        {motif.display_label}
-    </strong>
-
-    <span style="
-        opacity: 0.55;
-        font-size: 0.78rem;
-    ">
-        {motif.sequence}
-    </span>
-</div>
-"""
-                    )
-
-                with comp_col2:
-                    st.write(
-                        f"**{count}** motifs"
-                    )
-
-                with comp_col3:
-                    st.write(
-                        f"**{percentage:.1f}%**"
-                    )
-
-
-        # ====================================================
-        # Final sequence inspection
-        # ====================================================
-
-        with st.expander(
-            "Inspect final sequence",
-            expanded=False,
-        ):
-
-            view_mode = st.radio(
-                "View",
-                [
-                    "Compact",
-                    "Detailed",
-                ],
-                horizontal=True,
-                key="final_sequence_view",
-            )
-
-            render_sequence_design(
-                design=current_design,
-                motifs=motifs,
-                compact=(
-                    view_mode
-                    == "Compact"
-                ),
-                show_labels=(
-                    view_mode
-                    == "Detailed"
-                ),
-                show_legend=True,
-            )
-
-            st.markdown(
-                "##### Exact motif order"
-            )
-
-            st.text_area(
-                "Exact motif order",
-                " | ".join(
-                    current_design.motif_order
-                ),
-                height=130,
-                disabled=True,
-                label_visibility="collapsed",
-            )
-
-            st.markdown(
-                "##### Amino-acid sequence"
-            )
-
-            st.text_area(
-                "Final amino-acid sequence",
-                clean_sequence,
-                height=180,
-                disabled=True,
-                label_visibility="collapsed",
-            )
-
-
-# ============================================================
-# Custom AA sequence
-# ============================================================
-
-else:
-
-    sequence_input = st.text_area(
-        "Amino-acid sequence",
-        height=220,
-        placeholder=(
-            "Paste a one-letter amino-acid sequence..."
-        ),
-    )
-
-    clean_sequence = clean_aa_sequence(
-        sequence_input
-    )
-
-    if clean_sequence:
-
-        custom_seq_col1, custom_seq_col2 = (
-            st.columns(2)
+        with p3:
+            n_motifs = st.number_input("Motifs per sequence", 2, 2000, 84)
+        st.caption("Fraction of motif B in each design")
+        fractions = st.multiselect(
+            "Composition points",
+            [0.0, 0.1, 0.25, 0.31, 0.5, 0.67, 0.75, 0.86, 0.9, 1.0],
+            default=[0.1, 0.31, 0.5, 0.67, 0.86],
+            format_func=lambda x: f"{x:.0%} B",
         )
-
-        with custom_seq_col1:
-
-            st.metric(
-                "Sequence length",
-                f"{len(clean_sequence)} aa",
-            )
-
-        with custom_seq_col2:
-
-            st.metric(
-                "Unique residue types",
-                len(
-                    set(
-                        clean_sequence
-                    )
-                ),
-            )
-
-
-# ============================================================
-# Final design status
-# ============================================================
-
-if clean_sequence:
-    st.download_button("Download FASTA", f">{sanitize_folder_name(sequence_name) or 'sequence'}\n{clean_sequence}\n", file_name=f"{sanitize_folder_name(sequence_name) or 'sequence'}.fasta", mime="text/plain")
-    st.success(
-        f"Final sequence ready: "
-        f"{len(clean_sequence)} aa"
-    )
-
-else:
-
-    st.info(
-        "Build or enter a sequence before preparing a simulation."
-    )
-
-
-# ============================================================
-# 2. Simulation settings
-# ============================================================
-
-st.header(
-    "2. Simulation settings"
-)
-
-settings_col1, settings_col2, settings_col3 = (
-    st.columns(3)
-)
-
-with settings_col1:
-
-    temperature = st.number_input(
-        "Temperature (K)",
-        min_value=1.0,
-        value=float(
-            DEFAULT_TEMPERATURE
-        ),
-        step=10.0,
-    )
-
-    pH = st.number_input(
-        "pH",
-        min_value=0.0,
-        max_value=14.0,
-        value=float(
-            DEFAULT_PH
-        ),
-        step=0.1,
-    )
-
-with settings_col2:
-
-    ionic_strength = st.number_input(
-        "Ionic strength (M)",
-        min_value=0.0,
-        value=float(
-            DEFAULT_IONIC_STRENGTH
-        ),
-        step=0.01,
-    )
-
-    box_size = st.number_input(
-        "Box size (nm)",
-        min_value=1.0,
-        value=float(
-            DEFAULT_BOX_SIZE
-        ),
-        step=1.0,
-    )
-
-with settings_col3:
-
-    detected_platforms = available_platforms()
-    platform_options = [
-        candidate for candidate in ("CPU", "CUDA")
-        if candidate in detected_platforms
-    ]
-    if not platform_options:
-        st.error("Neither CPU nor CUDA is available in this OpenMM installation.")
-        platform_options = ["CPU"]
-
-    platform = st.selectbox(
-        "Platform",
-        platform_options,
-        index=(
-            platform_options.index(DEFAULT_PLATFORM)
-            if DEFAULT_PLATFORM in platform_options else 0
-        ),
-    )
-    st.caption("OpenMM platforms detected: " + ", ".join(detected_platforms))
-    if "CUDA" not in detected_platforms:
-        st.caption("CUDA cannot be selected because OpenMM does not detect it.")
-
-
-# ============================================================
-# Simulation length
-# ============================================================
-
-st.subheader(
-    "Simulation length"
-)
-
-length_col1, length_col2, length_col3 = (
-    st.columns(3)
-)
-
-with length_col1:
-
-    n_frames = st.number_input(
-        "Number of frames",
-        min_value=1,
-        value=int(
-            DEFAULT_N_FRAMES
-        ),
-        step=1000,
-    )
-
-with length_col2:
-
-    save_every = st.number_input(
-        "Save every (steps)",
-        min_value=1,
-        value=int(
-            DEFAULT_SAVE_EVERY
-        ),
-        step=100,
-    )
-
-with length_col3:
-
-    total_steps = (
-        int(n_frames)
-        *
-        int(save_every)
-    )
-
-    st.metric(
-        "Total integration steps",
-        f"{total_steps:,}",
-    )
-
-
-# ============================================================
-# Advanced simulation settings
-# ============================================================
-
-with st.expander(
-    "Advanced simulation settings"
-):
-
-    residue_file = st.text_input(
-        "Custom residue file",
-        value="",
-        placeholder=(
-            "Leave empty for automatic "
-            "temperature-specific CSV"
-        ),
-    )
-
-    fasta_name = st.text_input(
-        "FASTA filename",
-        value="idp.fasta",
-    )
-
-    number_of_molecules = st.number_input(
-        "Number of molecules (single chain for now)",
-        min_value=1,
-        max_value=1,
-        value=1,
-        step=1,
-    )
-
-    charge_termini = st.selectbox(
-        "Charge termini",
-        [
-            "both",
-            "none",
-        ],
-    )
-
-
-# ============================================================
-# 3. Simulation run
-# ============================================================
-
-st.header(
-    "3. Simulation run"
-)
-
-st.caption(
-    "Add the current sequence to a run. "
-    "Then build another architecture and "
-    "add it to the same queue."
-)
-
-batch_name = st.text_input(
-    "Run / batch name",
-    value="ELP_screen",
-    help=(
-        "All sequences in this run are stored together "
-        "and simulated sequentially."
-    ),
-)
-
-if batch_name.strip():
-
-    try:
-        preview_batch_dir = (
-            get_batch_directory(
-                batch_name
-            )
+        architectures = st.multiselect(
+            "Architectures",
+            ["alternating", "diblock", "central", "shuffled"],
+            default=["alternating", "diblock", "central", "shuffled"],
         )
-
-        st.caption(
-            f"Run folder: "
-            f"`{preview_batch_dir}`"
-        )
-
-    except Exception:
-        pass
-
-
-# ============================================================
-# Build SimulationConfig
-# ============================================================
-
-current_valid = bool(
-    sequence_name.strip()
-    and clean_sequence
-    and batch_name.strip()
-)
-
-
-def build_current_config():
-
-    custom_residue_file = None
-
-    if residue_file.strip():
-
-        custom_residue_file = Path(
-            residue_file.strip()
-        )
-
-    return SimulationConfig(
-        name=sequence_name.strip(),
-        sequence=clean_sequence,
-
-        temperature=float(
-            temperature
-        ),
-
-        pH=float(
-            pH
-        ),
-
-        ionic_strength=float(
-            ionic_strength
-        ),
-
-        box_size=float(
-            box_size
-        ),
-
-        n_frames=int(
-            n_frames
-        ),
-
-        save_every=int(
-            save_every
-        ),
-
-        platform=platform,
-
-        seed=1,
-
-        number_of_molecules=int(
-            number_of_molecules
-        ),
-
-        charge_termini=charge_termini,
-
-        residue_file=custom_residue_file,
-
-        fasta_name=(
-            fasta_name.strip()
-            or "idp.fasta"
-        ),
-    )
-
-
-# ============================================================
-# Add / run buttons
-# ============================================================
-
-button_col1, button_col2 = (
-    st.columns(2)
-)
-
-with button_col1:
-
-    add_to_run = st.button(
-        "Add design to run",
-        type="primary",
-        use_container_width=True,
-        disabled=(
-            not current_valid
-        ),
-    )
-
-with button_col2:
-
-    add_and_run = st.button(
-        "Add design and run",
-        use_container_width=True,
-        disabled=(
-            not current_valid
-        ),
-    )
-
-if (
-    add_to_run
-    or add_and_run
-):
-
-    try:
-
-        batch = get_or_create_batch(
-            batch_name
-        )
-
-        config = build_current_config()
-
-        batch_dir = Path(
-            batch.batch_dir
-        )
-
-        run_dir = prepare_simulation(
-            config=config,
-            batch_dir=batch_dir,
-        )
-
-        batch = add_simulation(
-            batch=batch,
-            name=config.name,
-            run_dir=run_dir,
-            expected_frames=int(
-                n_frames
-            ),
-        )
-
-        st.session_state[
-            "last_added_name"
-        ] = config.name
-
-        if add_and_run:
-
-            if (
-                batch.status
-                != "running"
-            ):
-
-                batch = start_batch(
-                    batch
-                )
-
-        st.success(
-            f"Added {config.name} to "
-            f"'{batch.name}'."
-        )
-
-        st.rerun()
-
-    except Exception as error:
-
-        st.error(
-            "Could not add design: "
-            f"{error}"
-        )
-
-
-# ============================================================
-# 4. Run queue
-# ============================================================
-
-active_batch = get_active_batch()
-
-if active_batch is not None:
-
-    st.header(
-        "4. Run queue"
-    )
-
-    st.markdown(
-        f"### {active_batch.name}"
-    )
-
-    counts = get_batch_counts(
-        active_batch
-    )
-
-    (
-        queue_metric1,
-        queue_metric2,
-        queue_metric3,
-        queue_metric4,
-    ) = st.columns(4)
-
-    with queue_metric1:
-
-        st.metric(
-            "Total",
-            counts[
-                "total"
-            ],
-        )
-
-    with queue_metric2:
-
-        st.metric(
-            "Queued",
-            counts[
-                "queued"
-            ],
-        )
-
-    with queue_metric3:
-
-        st.metric(
-            "Running",
-            counts[
-                "running"
-            ],
-        )
-
-    with queue_metric4:
-
-        st.metric(
-            "Finished",
-            counts[
-                "finished"
-            ],
-        )
-
-
-    # ========================================================
-    # Queue rows
-    # ========================================================
-
-    for index, item in enumerate(
-        active_batch.items,
-        start=1,
-    ):
-
-        status_icon = {
-            "queued": "○",
-            "running": "▶",
-            "finished": "✓",
-            "failed": "✕",
-            "stopped": "■",
-        }.get(
-            item.status,
-            "•",
-        )
-
-        (
-            row_col1,
-            row_col2,
-            row_col3,
-        ) = st.columns(
-            [4, 2, 1]
-        )
-
-        with row_col1:
-
-            st.write(
-                f"{status_icon} "
-                f"**{index}. {item.name}**"
-            )
-
-        with row_col2:
-
-            st.write(
-                f"{item.expected_frames:,} frames"
-            )
-
-        with row_col3:
-
-            if item.status == "queued":
-
-                if st.button(
-                    "Remove",
-                    key=(
-                        f"remove_"
-                        f"{index}_"
-                        f"{item.name}"
-                    ),
-                ):
-
-                    try:
-
-                        active_batch = (
-                            remove_simulation(
-                                active_batch,
-                                item.name,
-                            )
-                        )
-
-                        st.rerun()
-
-                    except Exception as error:
-
-                        st.error(
-                            str(error)
-                        )
-
-
-    st.markdown("---")
-
-    run_col1, run_col2 = (
-        st.columns(2)
-    )
-
-    with run_col1:
-
-        can_start = (
-            counts[
-                "queued"
-            ] > 0
-            and counts[
-                "running"
-            ] == 0
-        )
-
-        if st.button(
-            "Run queued simulations",
-            type="primary",
-            use_container_width=True,
-            disabled=(
-                not can_start
-            ),
-        ):
-
-            try:
-
-                active_batch = start_batch(
-                    active_batch
-                )
-
-                st.rerun()
-
-            except Exception as error:
-
-                st.error(
-                    "Could not start batch: "
-                    f"{error}"
-                )
-
-    with run_col2:
-
-        if counts[
-            "running"
-        ] > 0:
-
-            current = get_current_summary(
-                active_batch
-            )
-
-            if current is not None:
-
-                if st.button(
-                    "Stop current simulation",
-                    use_container_width=True,
-                ):
-
-                    running_item = (
-                        active_batch.items[
-                            current[
-                                "queue_index"
-                            ]
-                        ]
-                    )
-
-                    stop_run(
-                        Path(
-                            running_item.run_dir
-                        )
-                    )
-
-                    st.rerun()
-
-
-# ============================================================
-# 5. Live simulation monitor
-# ============================================================
-
-def render_live_monitor():
-
-    batch = get_active_batch()
-
-    if batch is None:
-        return
-
-    if batch.status == "running":
-
+        seed = st.number_input("Shuffle seed", 0, 999999, 1)
         try:
-            batch = advance_batch(
-                batch
+            candidates = make_library(
+                safe_label(prefix), motif_a, motif_b, int(n_motifs),
+                fractions, architectures, seed=int(seed),
             )
-
-        except Exception as error:
-
-            st.error(
-                "Run monitoring error: "
-                f"{error}"
-            )
-
-            return
-
-    counts = get_batch_counts(
-        batch
-    )
-
-    if (
-        counts[
-            "running"
-        ] > 0
-        or counts[
-            "finished"
-        ] > 0
-    ):
-
-        st.header(
-            "5. Simulation progress"
+        except ValueError as exc:
+            st.warning(str(exc))
+    if candidates:
+        preview(candidates)
+        st.session_state["design_candidates"] = candidates
+        st.download_button(
+            "Download FASTA",
+            data="".join(f">{c.name}\n{c.sequence}\n" for c in candidates),
+            file_name="elp_designs.fasta", mime="text/plain",
         )
+    else:
+        st.session_state["design_candidates"] = []
 
-        overall_fraction = (
-            get_batch_progress(
-                batch
-            )
-        )
+    st.divider()
+    st.subheader("Prepare simulations")
+    st.caption("The same conditions are applied to every design. Existing run folders will not be overwritten.")
+    batch_name = st.text_input("Experiment name", "first_test")
+    s1, s2, s3, s4 = st.columns(4)
+    with s1:
+        temperature = st.selectbox("Temperature (K)", list(range(300, 401, 10)), index=7)
+    with s2:
+        platform = st.selectbox("Compute", choices)
+    with s3:
+        frames = st.number_input("Saved frames", 2, 50000, 50)
+    with s4:
+        save_every = st.number_input("Steps per frame", 1, 1000000, 1000)
+    with st.expander("Advanced simulation settings"):
+        box_nm = st.number_input("Box length (nm)", 5.0, 500.0, 50.0)
+        ph = st.number_input("pH", 0.0, 14.0, 7.0)
+        ionic = st.number_input("Ionic strength (M)", 0.0, 5.0, 0.17)
+        first_seed = st.number_input("Starting random seed", 0, 2147483646, 1)
+    st.caption(f"{int(frames) * int(save_every):,} integration steps per sequence; "
+               f"{len(candidates)} sequence(s), one single-chain run each.")
+    if st.button("Prepare designs", type="primary", disabled=not candidates):
+        try:
+            b = load_or_create_batch(batch_name)
+            prepared = []
+            for i, candidate in enumerate(candidates):
+                cfg = SimulationConfig(
+                    name=candidate.name, sequence=candidate.sequence,
+                    temperature=float(temperature), pH=float(ph),
+                    ionic_strength=float(ionic), box_size=float(box_nm),
+                    n_frames=int(frames), save_every=int(save_every),
+                    platform=platform, seed=int(first_seed) + i,
+                )
+                run = prepare_simulation(cfg, batch_dir=Path(b.batch_dir))
+                b = add_simulation(b, candidate.name, run, int(frames))
+                prepared.append(candidate.name)
+            st.success(f"Prepared {len(prepared)} run(s) in '{b.name}'. Open Simulate to start.")
+        except Exception as exc:
+            st.error(f"Preparation stopped: {exc}")
+            st.caption("Previously prepared sequences have been retained; inspect the batch before retrying.")
 
-        st.markdown(
-            f"### {batch.name}"
-        )
 
-        st.progress(
-            overall_fraction,
-            text=(
-                f"Overall run: "
-                f"{overall_fraction * 100:.1f}%"
-            ),
-        )
-
-    current = get_current_summary(
-        batch
-    )
-
-    if current is not None:
-
-        current_index = (
-            current[
-                "queue_index"
-            ]
-            + 1
-        )
-
-        st.markdown(
-            f"### Running: "
-            f"{current['name']}"
-        )
-
-        st.caption(
-            f"Simulation "
-            f"{current_index} of "
-            f"{current['queue_total']}"
-        )
-
-        progress = (
-            current[
-                "progress_fraction"
-            ]
-        )
-
-        st.progress(
-            progress,
-            text=(
-                f"{current['completed_frames']:,} / "
-                f"{current['expected_frames']:,} frames "
-                f"({progress * 100:.1f}%)"
-            ),
-        )
-
-        (
-            time_col1,
-            time_col2,
-            time_col3,
-        ) = st.columns(3)
-
-        with time_col1:
-
-            st.metric(
-                "Elapsed",
-                current[
-                    "elapsed_text"
-                ],
-            )
-
-        with time_col2:
-
-            st.metric(
-                "Estimated total",
-                current[
-                    "estimated_total_text"
-                ],
-            )
-
-        with time_col3:
-
-            st.metric(
-                "Remaining",
-                current[
-                    "remaining_text"
-                ],
-            )
-
-        batch_remaining = (
-            estimate_batch_remaining_seconds(
-                batch
-            )
-        )
-
-        if batch_remaining is not None:
-
-            st.info(
-                "Estimated time remaining for entire run: "
-                f"**{format_duration(batch_remaining)}**"
-            )
-
-        else:
-
-            st.caption(
-                "Runtime estimate will appear after "
-                "trajectory frames begin to accumulate."
-            )
-
-        with st.expander(
-            "Process details"
-        ):
-
-            st.write(
-                f"**PID:** "
-                f"{current['pid']}"
-            )
-
-            st.write(
-                f"**Log:** "
-                f"`{current['log_path']}`"
-            )
-
-            st.write(
-                f"**Error log:** "
-                f"`{current['error_log_path']}`"
-            )
-
-    if batch.status in {"failed", "stopped"}:
-        st.error(
-            "One or more simulations failed or were stopped. "
-            "Inspect the simulation's run_error.log and run.log files."
-        )
+with simulate_tab:
+    st.subheader("Your simulation queues")
+    batches = batch_paths()
+    if not batches:
+        st.info("No experiments yet. Create sequences in Design.")
+    else:
+        chosen = st.selectbox("Experiment", batches, format_func=lambda p: p.parent.name)
+        bdir = chosen.parent
+        batch = load_batch(bdir)
+        if batch.status == "running":
+            try:
+                batch = advance_batch(batch)
+            except Exception as exc:
+                st.error(f"Queue monitor error: {exc}")
+        counts = get_batch_counts(batch)
+        a, bb, c, d = st.columns(4)
+        a.metric("Queued", counts["queued"])
+        bb.metric("Running", counts["running"])
+        c.metric("Finished", counts["finished"])
+        d.metric("Failed / stopped", counts["failed"] + counts["stopped"])
+        if counts["queued"] and not counts["running"]:
+            if st.button("Run queued simulations", type="primary"):
+                try:
+                    # Preflight the next queued simulation before creating a worker.
+                    item = next(i for i in batch.items if i.status == "queued")
+                    check = inspect_run(Path(item.run_dir))
+                    if not check["ok"]:
+                        raise ValueError("; ".join(check["errors"]))
+                    start_batch(batch)
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"Could not start: {exc}")
         for item in batch.items:
-            if item.status == "failed":
-                error_file = Path(item.run_dir) / "run_error.log"
-                st.write(f"**Failed: {item.name}**")
-                st.code(str(error_file))
-                if error_file.exists():
-                    lines = error_file.read_text(
-                        encoding="utf-8", errors="replace"
-                    ).splitlines()
-                    st.code("\n".join(lines[-35:]) or "(empty error log)")
+            with st.expander(f"{item.name} — {item.status}", expanded=item.status in ("running", "failed")):
+                st.caption(item.run_dir)
+                st.write(item.message or "Not started")
+                report = inspect_run(Path(item.run_dir))
+                st.code(report.get("command_display", "No run command"), language="text")
+                if not report["ok"]:
+                    st.error("; ".join(report["errors"]))
+                status = get_run_summary(Path(item.run_dir))
+                st.progress(float(status["progress_fraction"]),
+                            text=f"{status['completed_frames']}/{item.expected_frames} saved frames")
+                if item.status == "running" and st.button(
+                    "Stop this simulation", key=f"stop_{item.name}"
+                ):
+                    try:
+                        stop_run(Path(item.run_dir))
+                        st.rerun()
+                    except Exception as exc:
+                        st.error(str(exc))
+                for filename in ("run.log", "run_error.log"):
+                    logfile = Path(item.run_dir) / filename
+                    with st.expander(filename):
+                        if logfile.exists():
+                            lines = logfile.read_text(encoding="utf-8", errors="replace").splitlines()
+                            st.code("\n".join(lines[-60:]) or "(empty)", language="text")
+                        else:
+                            st.caption("No file yet")
+    st.caption("Running occurs in a child Python process; Streamlit terminal output can remain quiet.")
+    if st.button("Refresh simulation status"):
+        st.rerun()
+    with st.expander("Local execution diagnostics"):
+        st.write("Detected OpenMM platforms:", ", ".join(platforms))
+        st.code("python -m calvados_library_builder.preflight "
+                '"runs\\first_test\\test_vpgvg"')
+        st.caption("Open run_error.log for Python tracebacks, run.log for CALVADOS progress, "
+                   "and runner_exit_code.txt for the worker result.")
 
-    if batch.status == "finished":
 
-        st.success(
-            "All simulations in this run have finished."
+with analyze_tab:
+    st.subheader("Analyze completed DCD trajectories")
+    runs = run_paths()
+    if not runs:
+        st.info("No prepared simulations found yet.")
+    else:
+        target = st.selectbox(
+            "Simulation", runs,
+            format_func=lambda p: str(p.relative_to(ROOT)),
         )
-
-
-# ============================================================
-# Automatic progress refresh
-# ============================================================
-
-if hasattr(
-    st,
-    "fragment",
-):
-
-    @st.fragment(
-        run_every="3s"
-    )
-    def live_monitor_fragment():
-
-        render_live_monitor()
-
-
-    live_monitor_fragment()
-
-else:
-
-    render_live_monitor()
-
-    if active_batch is not None:
-
-        counts = get_batch_counts(
-            active_batch
-        )
-
-        if counts[
-            "running"
-        ] > 0:
-
-            st.info(
-                "Automatic progress refresh is unavailable "
-                "in this Streamlit version."
+        topology = target / "top.pdb"
+        dcds = [p for p in target.glob("*.dcd") if not p.name.startswith("equilibration")]
+        if not dcds:
+            st.warning("No DCD trajectory found yet. Run the simulation first.")
+        else:
+            st.caption("Trajectory found: " + ", ".join(p.name for p in dcds))
+        ac, bc = st.columns(2)
+        with ac:
+            stride = st.number_input("Analysis stride", 1, 10000, 1)
+        with bc:
+            theta_ref = st.number_input(
+                "Theta Rg at N=420 (nm)", min_value=0.1, max_value=20.0,
+                value=float(THETA_REF_NM), step=0.001, format="%.4f",
             )
+        st.caption(
+            "Collapsed = Rg < Rgθ(N), with Rgθ(N) = Rgθ(420) × "
+            "sqrt((N−1)/419). Rates count state transitions per nanosecond "
+            "in the originating state."
+        )
+        if st.button("Analyze selected trajectory", type="primary", disabled=not dcds):
+            try:
+                result = analyze_run(target, stride=int(stride), theta_ref_nm=float(theta_ref))
+                st.success(f"Analyzed {result['n_frames']} frames, saved results in {target / 'analysis'}")
+            except Exception as exc:
+                st.error(f"Analysis failed: {exc}")
+                st.caption("Analysis requires a complete readable DCD and a matching single-chain PDB.")
+        summary_file = target / "analysis" / "summary.csv"
+        if summary_file.exists():
+            result = pd.read_csv(summary_file).iloc[0]
+            a, b, c, d = st.columns(4)
+            a.metric("Mean Rg", f"{result['mean_rg_nm']:.2f} nm")
+            b.metric("Collapsed", f"{result['fraction_collapsed']:.1%}")
+            c.metric("k collapse", f"{result['k_collapse_per_ns']:.3g} /ns")
+            d.metric("k escape", f"{result['k_escape_per_ns']:.3g} /ns")
+            st.caption(
+                f"Rg theta = {result['rg_theta_nm']:.3f} nm • "
+                f"{int(result['n_frames'])} sampled frames • "
+                f"{result['sample_dt_ns']:.4g} ns per analyzed frame."
+            )
+            p1, p2 = st.columns(2)
+            with p1:
+                picture = target / "analysis" / "rg_time.png"
+                if picture.exists():
+                    st.image(str(picture), caption="Rg trajectory")
+            with p2:
+                picture = target / "analysis" / "rg_distribution.png"
+                if picture.exists():
+                    st.image(str(picture), caption="Rg distribution")
+            st.download_button(
+                "Download analysis summary CSV",
+                summary_file.read_bytes(), file_name=f"{target.name}_rg_summary.csv",
+                mime="text/csv",
+            )
+            st.dataframe(pd.DataFrame([result]), use_container_width=True)
+    st.divider()
+    st.subheader("Compare analyzed sequences")
+    summary_files = [p / "analysis" / "summary.csv" for p in runs]
+    summary_files = [p for p in summary_files if p.is_file()]
+    if summary_files:
+        table = pd.concat((pd.read_csv(p) for p in summary_files), ignore_index=True)
+        cols = ["name", "temperature_K", "mean_rg_nm", "rg_theta_nm",
+                "fraction_collapsed", "k_collapse_per_ns", "k_escape_per_ns",
+                "mean_rg_collapsed_nm", "mean_rg_expanded_nm", "n_frames"]
+        st.dataframe(table[[c for c in cols if c in table.columns]], use_container_width=True)
+        metric = st.selectbox("Comparison metric", [
+            "mean_rg_nm", "fraction_collapsed",
+            "k_collapse_per_ns", "k_escape_per_ns",
+            "mean_rg_collapsed_nm", "rg_relative_theta",
+        ])
+        st.bar_chart(table.set_index("name")[[metric]])
+        st.download_button(
+            "Download comparison CSV", table.to_csv(index=False),
+            file_name="elp_library_summary.csv", mime="text/csv",
+        )
+    else:
+        st.caption("Analyze one or more trajectories to see cross-sequence comparisons here.")
 
-            if st.button(
-                "Refresh progress"
-            ):
-
-                st.rerun()
+st.divider()
+st.caption("Original detailed designer: run `python -m streamlit run legacy_app.py`. "
+           "Simulation rates from short trajectories are descriptive, not equilibrium estimates.")
