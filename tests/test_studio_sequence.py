@@ -32,8 +32,8 @@ def test_reordering_merging_and_splitting_preserve_exact_order():
         {"segments": [{"motif": "VPGVG", "count": 3}]},
     ]
     assert groups_to_sequence(groups, motifs) == "VPGKG" * 2 + "VPGEG" + "VPGVG" * 3
-    assert groups_to_architecture(groups, motifs) == "VPGKG×2 | VPGEG×1 | VPGVG×3"
-    assert len(normalize_groups(groups, motifs)) == 3
+    assert groups_to_architecture(groups, motifs) == "(VPGKG×2 + VPGEG×1)×1 | VPGVG×3"
+    assert len(normalize_groups(groups, motifs)) == 2
     reordered = [groups[1], groups[0]]
     assert groups_to_sequence(reordered, motifs) == "VPGVG" * 3 + "VPGKG" * 2 + "VPGEG"
 
