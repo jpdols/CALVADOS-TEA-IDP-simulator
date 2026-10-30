@@ -22,7 +22,7 @@ cd CALVADOS-TEA-IDP-simulator
 
 ```bat
 conda env create -f environment.yml
-conda activate calvados-elp-local
+conda activate calvados-tea-idp-simulator
 ```
 
 This installs our project **and CALVADOS automatically**. The Python dependencies come from the **upstream CALVADOS 0.9.1** `pyproject.toml`, including `openmm[cuda12]>=8.2,<8.5`, `MDAnalysis>=2.9,<2.11`, `mdtraj>=1.11,<1.12`, NumPy, pandas, Biopython, Jinja2, tqdm, Matplotlib, PyYAML, Pydantic 2, statsmodels, Numba and SciPy. We also install Streamlit, Plotly and OpenPyXL.
@@ -49,7 +49,7 @@ Streamlit prints a local URL (normally `http://localhost:8501`) that you can ope
 git clone https://github.com/jpdols/CALVADOS-TEA-IDP-simulator.git
 cd CALVADOS-TEA-IDP-simulator
 conda env create -f environment.yml
-conda activate calvados-elp-local
+conda activate calvados-tea-idp-simulator
 python -m calvados_library_builder.diagnostics
 python -m streamlit run app.py
 ```
