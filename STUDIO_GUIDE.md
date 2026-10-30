@@ -224,3 +224,61 @@ analyzed sequences cannot be included. Rates based on short, non-equilibrated
 runs should not be treated as reliable equilibrium properties.
 
 Credits: **Created by Joep Dols · Nikolina Šoštarić Lab · TU Delft**.
+
+
+## Triplicate simulations
+
+Under **Design → Prepare simulations**, enable **Run in triplicate**.
+For each sequence the app prepares three independently seeded runs:
+
+```text
+runs/
+  experiment_name/
+    batch_state.json
+    ELP_A/
+      ELP_A__rep01/
+        config.yaml
+        components.yaml
+        run.py
+        replicate_info.json
+        input/
+      ELP_A__rep02/
+        ...
+      ELP_A__rep03/
+        ...
+```
+
+The sequence itself is unchanged across replicates. Each run has a separate
+random seed (starting seed + 0, +1, +2), generated system, trajectory,
+checkpoint, logs and analysis directory. All three are queued sequentially
+by the existing batch runner. Preflight rejects existing run folders, so
+nothing is overwritten. If the selected library contains ten sequences,
+triplicate preparation queues 30 independent simulations.
+
+The previous single-replicate folder layout remains unchanged. Each
+replicate stores its original sequence name, replicate number and seed in
+`replicate_info.json`, allowing the Analyze tab to group statistics by
+sequence even though every simulation has a unique run name.
+
+## Excluding equilibration frames
+
+In **Analyze**, optionally enable **Discard first 10% of trajectory frames**.
+For a 1,000-frame DCD, this excludes the first 100 original frames.
+The number removed is `floor(0.10 * original_DCD_frame_count)`. This is
+applied **before** analysis stride, Rg statistics, collapsed fractions,
+transition counts, dwell times and kinetics. The saved time trace retains
+absolute frame numbers and original simulation times; a shorter selected
+trajectory is not relabeled as starting at zero.
+
+The choice is recorded in `analysis/summary.csv` as `discard_fraction`,
+`discarded_frames` and `total_trajectory_frames`, and in
+`analysis/methods.json`. When repeating an analysis, the same output files
+are regenerated with the newly selected discard setting. The source DCD is
+never modified.
+
+The Analyze comparison now includes an additional per-sequence table with
+**mean and between-replicate standard deviation** for the five central
+metrics whenever more than one independently analyzed replicate exists.
+It does not concatenate frames or pool transition counts. For meaningful
+comparisons, apply the same equilibration policy and adequate trajectory
+duration to all replicates.
