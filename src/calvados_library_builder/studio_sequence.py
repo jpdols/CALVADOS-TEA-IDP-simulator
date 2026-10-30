@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -83,6 +84,22 @@ def count_motifs(groups: object, motifs: Mapping[str, Motif]) -> dict[str, int]:
     return counts
 
 
+def _write_saved_json(path: Path, payload: object) -> None:
+    """Persist safely, with a fallback for Windows external-drive renames."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp = path.with_name(path.name + ".tmp")
+    temp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    try:
+        temp.replace(path)
+    except (PermissionError, FileExistsError):
+        # Some drives cannot rename over an existing file; retain an old
+        # backup then copy the new JSON directly instead of losing edits.
+        if path.is_file():
+            shutil.copyfile(path, path.with_name(path.name + ".previous"))
+        shutil.copyfile(temp, path)
+        temp.unlink(missing_ok=True)
+
+
 def load_draft(path: Path, motifs: Mapping[str, Motif]) -> tuple[str, list[dict]]:
     """Load a saved design. Corrupted drafts raise instead of silently erasing."""
     if not path.is_file():
@@ -103,11 +120,8 @@ def save_draft(
     if not isinstance(name, str) or not name.strip():
         raise ValueError("Sequence name cannot be empty.")
     normalized = normalize_groups(groups, motifs)
-    path.parent.mkdir(parents=True, exist_ok=True)
     payload = {"version": 1, "name": name, "groups": normalized}
-    temporary = path.with_name(path.name + ".tmp")
-    temporary.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    temporary.replace(path)
+    _write_saved_json(path, payload)
 
 
 def extract_single_fasta(text: str) -> str:
@@ -210,7 +224,4 @@ def save_custom_motifs(path: Path, custom: Mapping[str, Motif]) -> None:
             "color": motif.color,
             "label": motif.label,
         })
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_name(path.name + ".tmp")
-    temp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    temp.replace(path)
+    _write_saved_json(path, payload)
