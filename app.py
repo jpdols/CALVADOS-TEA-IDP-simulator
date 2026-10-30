@@ -42,8 +42,8 @@ from calvados_library_builder.studio_sequence import (
 
 st.set_page_config(page_title="ELP Studio", page_icon="🧬", layout="wide")
 # Optional artwork extracted from the user's original scanned PDF.
-# Place the PNG in assets/elp_header.png; the dashboard stays functional without it.
-header_art = Path(__file__).resolve().parent / "assets" / "elp_header.png"
+# The tracked image lives in assets/elp_header.jpg; the dashboard stays functional without it.
+header_art = Path(__file__).resolve().parent / "assets" / "elp_header.jpg"
 header_title, header_illustration = st.columns([5, 2], vertical_alignment="center")
 with header_title:
     st.title("ELP Studio")
