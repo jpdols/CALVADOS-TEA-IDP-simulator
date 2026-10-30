@@ -1,3 +1,5 @@
+> **New simplified app:** Run `python -m streamlit run app.py` and follow **Design → Simulate → Analyze**. See [STUDIO_GUIDE.md](STUDIO_GUIDE.md) for the new workflow, analysis definitions and execution debugging. The old detailed interface remains available with `python -m streamlit run legacy_app.py`.
+
 # CALVADOS–TEA IDP Simulator
 
 Local application for designing elastin-like polypeptide (ELP) / IDP sequences, visualizing their motif arrangements and preparing CALVADOS simulations.
