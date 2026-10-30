@@ -19,37 +19,43 @@ def default_groups() -> list[dict]:
 
 
 def normalize_groups(groups: object, motifs: Mapping[str, Motif]) -> list[dict]:
-    """Reject invalid/missing motif references and enforce safe lengths.
+    """Return contiguous single-motif runs, merging identical neighbors.
 
-    A group can contain different motif types; groups have explicit boundaries
-    even when two consecutive groups happen to contain the same motif.
+    An explicit split is represented by split_before=True on the second run.
+    It preserves two draggable portions of the same motif until either moves;
+    all other neighboring identical runs are automatically merged. Legacy
+    multi-motif groups are expanded without losing their amino-acid order.
     """
     if not isinstance(groups, list) or len(groups) > MAX_GROUPS:
         raise ValueError(f"Expected a list of at most {MAX_GROUPS} groups.")
     output: list[dict] = []
-    total = 0
+    residues = 0
     for index, group in enumerate(groups):
         if not isinstance(group, dict) or not isinstance(group.get("segments"), list):
             raise ValueError(f"Invalid group {index + 1}.")
-        parts: list[dict] = []
-        for segment in group["segments"]:
+        for j, segment in enumerate(group["segments"]):
             if not isinstance(segment, dict):
                 raise ValueError("Invalid motif segment.")
-            name = segment.get("motif")
-            count = segment.get("count")
+            name, count = segment.get("motif"), segment.get("count")
             if not isinstance(name, str) or name not in motifs:
                 raise ValueError(f"Unknown motif in sequence: {name!r}")
-            if isinstance(count, bool) or not isinstance(count, int) or count < 1 or count > 5000:
+            if isinstance(count, bool) or not isinstance(count, int) or not 1 <= count <= 5000:
                 raise ValueError("Repeat count must be an integer between 1 and 5000.")
-            total += len(motifs[name].sequence) * count
-            if total > MAX_RESIDUES:
+            residues += len(motifs[name].sequence) * count
+            if residues > MAX_RESIDUES:
                 raise ValueError(f"Maximum sequence length is {MAX_RESIDUES:,} residues.")
-            if parts and parts[-1]["motif"] == name:
-                parts[-1]["count"] += count
-            else:
-                parts.append({"motif": name, "count": count})
-        if parts:
-            output.append({"segments": parts})
+            split = bool(group.get("split_before", False)) and j == 0
+            if output and output[-1]["segments"][0]["motif"] == name and not split:
+                merged = output[-1]["segments"][0]["count"] + count
+                if merged <= 5000:
+                    output[-1]["segments"][0]["count"] = merged
+                    continue
+            entry = {"segments": [{"motif": name, "count": count}]}
+            if split and output:
+                entry["split_before"] = True
+            output.append(entry)
+    if len(output) > MAX_GROUPS:
+        raise ValueError(f"Maximum number of motif blocks is {MAX_GROUPS}.")
     return output
 
 
@@ -62,22 +68,46 @@ def groups_to_sequence(groups: object, motifs: Mapping[str, Motif]) -> str:
 
 
 def groups_to_architecture(groups: object, motifs: Mapping[str, Motif]) -> str:
-    valid = normalize_groups(groups, motifs)
     return " | ".join(
-        " + ".join(
-            f'{part["motif"]}×{part["count"]}' for part in group["segments"]
-        )
-        for group in valid
+        f'{group["segments"][0]["motif"]}×{group["segments"][0]["count"]}'
+        for group in normalize_groups(groups, motifs)
     )
 
 
 def count_motifs(groups: object, motifs: Mapping[str, Motif]) -> dict[str, int]:
     counts: dict[str, int] = {}
     for group in normalize_groups(groups, motifs):
-        for part in group["segments"]:
-            name = part["motif"]
-            counts[name] = counts.get(name, 0) + part["count"]
+        part = group["segments"][0]
+        name = part["motif"]
+        counts[name] = counts.get(name, 0) + part["count"]
     return counts
+
+
+def load_draft(path: Path, motifs: Mapping[str, Motif]) -> tuple[str, list[dict]]:
+    """Load a saved design. Corrupted drafts raise instead of silently erasing."""
+    if not path.is_file():
+        return "test_sequence", default_groups()
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or data.get("version") != 1:
+        raise ValueError("Unsupported saved sequence draft format.")
+    name = data.get("name", "test_sequence")
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("Invalid sequence name in draft.")
+    return name, normalize_groups(data.get("groups"), motifs)
+
+
+def save_draft(
+    path: Path, name: str, groups: object, motifs: Mapping[str, Motif]
+) -> None:
+    """Store exact ordered blocks locally for the next application session."""
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("Sequence name cannot be empty.")
+    normalized = normalize_groups(groups, motifs)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"version": 1, "name": name, "groups": normalized}
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    temporary.replace(path)
 
 
 def extract_single_fasta(text: str) -> str:
