@@ -46,7 +46,8 @@ def inspect_run(path: Path) -> dict:
     if config.get("platform") not in ("CPU", "CUDA"):
         errors.append("CALVADOS accepts CPU or CUDA as platform")
     command = [
-        sys.executable, "-u", str(runner), "--path", str(path),
+        sys.executable, "-u", "-m", "calvados_library_builder.calvados_entrypoint",
+        str(runner), "--path", str(path),
         "--config", "config.yaml", "--components", "components.yaml",
     ]
     return {
