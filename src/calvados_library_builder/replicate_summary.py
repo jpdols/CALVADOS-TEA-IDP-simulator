@@ -32,6 +32,8 @@ def summarize_replicates(table: pd.DataFrame) -> pd.DataFrame:
     for key in metrics:
         source[key] = pd.to_numeric(source[key], errors="coerce")
     keys = ["sequence_name", "temperature_K"]
+    if "experiment" in source.columns:
+        keys.insert(0, "experiment")
     grouped = source.groupby(keys, dropna=False, sort=True)
     counts = grouped.size().rename("n_replicates")
     result = counts.to_frame()
