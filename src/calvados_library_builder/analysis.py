@@ -144,7 +144,10 @@ def analyze_run(run_dir: Path, stride: int = 1,
             f"Topology has {len(universe.atoms)} beads but FASTA has {len(seq)} residues. "
             "Check single-chain setup."
         )
-    masses = np.asarray(universe.atoms.masses, dtype=float)
+    try:
+        masses = np.asarray(universe.atoms.masses, dtype=float)
+    except (AttributeError, Exception):
+        masses = np.ones(len(seq), dtype=float)
     if not np.isfinite(masses).all() or (masses <= 0).any():
         masses = np.ones(len(seq), dtype=float)
     masses /= masses.sum()
