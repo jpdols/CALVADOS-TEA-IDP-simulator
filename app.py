@@ -23,6 +23,13 @@ from calvados_library_builder.diagnostics import available_platforms
 from calvados_library_builder.preflight import inspect_run
 from calvados_library_builder.prepare import prepare_simulation
 from calvados_library_builder.runner import get_run_summary, stop_run
+from calvados_library_builder.motifs import get_default_motifs, create_motif
+from calvados_library_builder.motif_canvas import motif_canvas
+from calvados_library_builder.studio_sequence import (
+    default_groups, groups_to_sequence, groups_to_architecture,
+    count_motifs, normalize_groups, extract_single_fasta,
+    segment_raw_sequence, load_custom_motifs, save_custom_motifs,
+)
 
 
 st.set_page_config(page_title="ELP Studio", page_icon="🧬", layout="wide")
@@ -83,81 +90,186 @@ design_tab, simulate_tab, analyze_tab = st.tabs(
 )
 
 with design_tab:
-    st.subheader("Build a single ELP or a library")
-    kind = st.radio(
-        "What would you like to make?",
-        ["One repeated motif", "One custom sequence", "Two-motif library"],
-        horizontal=True,
-    )
-    candidates: list[Candidate] = []
-    if kind == "One repeated motif":
-        a, b, c = st.columns([2, 2, 1])
-        with a:
-            name = st.text_input("Sequence name", "test_vpgvg")
-        with b:
-            motif = st.selectbox(
-                "Motif", ["VPGVG", "IPAVG", "VPGIG", "VPGKG", "VPGEG", "VPAVG"]
-            )
-        with c:
-            repeats = st.number_input("Repeats", 1, 2000, 10)
-        candidates = [simple_elp(safe_label(name), motif, int(repeats))]
-    elif kind == "One custom sequence":
-        name = st.text_input("Sequence name", "my_elp")
-        sequence = st.text_area(
-            "Amino acid sequence", "VPGVG" * 10,
-            help="Paste a continuous one-letter sequence; spaces and newlines are accepted.",
-        )
+    st.subheader("Design your ELP")
+    st.caption("Build directly with motif balls. The colored architecture below is the sequence used for simulation.")
+
+    motif_path = ROOT / "_custom_motifs.json"
+    if "studio_motifs" not in st.session_state:
         try:
-            seq = validate_sequence(sequence)
-            candidates = [Candidate(safe_label(name), seq, "custom")]
-        except ValueError as exc:
-            st.warning(str(exc))
+            st.session_state["studio_motifs"] = {
+                **get_default_motifs(), **load_custom_motifs(motif_path)
+            }
+        except (ValueError, OSError, KeyError) as exc:
+            st.session_state["studio_motifs"] = get_default_motifs()
+            st.error(f"Could not load custom motif library: {exc}")
+    st.session_state.setdefault("studio_groups", default_groups())
+    st.session_state.setdefault("studio_canvas_revision", 0)
+    motifs = st.session_state["studio_motifs"]
+
+    name = st.text_input("Sequence name", "test_sequence", key="studio_sequence_name")
+
+    # Custom motif editor stays compact and does not replace existing colors.
+    with st.expander("Motif palette · add your own color and amino-acid sequence"):
+        st.caption("The six built-in motifs use the thesis palette. New motifs are saved on this computer.")
+        colors = st.columns(3)
+        for idx, motif in enumerate(motifs.values()):
+            with colors[idx % 3]:
+                st.markdown(
+                    f'<span style="display:inline-block;background:{motif.color};'
+                    f'width:13px;height:13px;border-radius:50%;margin-right:8px"></span>'
+                    f'<b>{motif.name}</b> · {motif.sequence}', unsafe_allow_html=True
+                )
+        with st.form("new_motif_form", clear_on_submit=True):
+            left, mid, right = st.columns([1, 2, 1])
+            with left:
+                motif_name = st.text_input("New motif name", placeholder="VPGFG")
+            with mid:
+                motif_sequence = st.text_input("Amino acids", placeholder="VPGFG")
+            with right:
+                motif_color = st.color_picker("Color", "#00AEEF")
+            if st.form_submit_button("Add motif to palette"):
+                try:
+                    new_motif = create_motif(motif_name, motif_sequence, motif_color)
+                    if new_motif.name in motifs:
+                        raise ValueError("Motif already exists. Choose a different name.")
+                    custom = {
+                        key: value for key, value in motifs.items()
+                        if key not in get_default_motifs()
+                    }
+                    custom[new_motif.name] = new_motif
+                    save_custom_motifs(motif_path, custom)
+                    st.session_state["studio_motifs"] = {
+                        **get_default_motifs(), **custom
+                    }
+                    st.success(f"Added {new_motif.name} with color {new_motif.color}.")
+                    st.rerun()
+                except (ValueError, OSError) as exc:
+                    st.error(str(exc))
+
+    # The canvas is always visible, directly at the top of the design workflow.
+    motif_definitions = {
+        n: {"sequence": m.sequence, "color": m.color, "label": m.display_label}
+        for n, m in motifs.items()
+    }
+    canvas = motif_canvas(
+        groups=st.session_state["studio_groups"],
+        motifs=motif_definitions,
+        revision=st.session_state["studio_canvas_revision"],
+    )
+    try:
+        edited_groups = normalize_groups(canvas.groups, motifs)
+        st.session_state["studio_groups"] = edited_groups
+    except (ValueError, TypeError) as exc:
+        edited_groups = st.session_state["studio_groups"]
+        st.error(f"Invalid architecture: {exc}")
+
+    # Pasted raw sequences can still be imported without losing unmatched residues.
+    with st.expander("Paste an amino-acid sequence or FASTA instead"):
+        st.caption("Known motifs are converted into colored balls; unmatched residues remain as grey fragments.")
+        pasted = st.text_area(
+            "Paste sequence (one FASTA record or plain amino acids)",
+            key="studio_paste_sequence", height=110,
+        )
+        if st.button("Replace canvas with pasted sequence"):
+            try:
+                parsed, extras = segment_raw_sequence(pasted, motifs)
+                if extras:
+                    custom = {
+                        key: value for key, value in motifs.items()
+                        if key not in get_default_motifs()
+                    }
+                    custom.update(extras)
+                    save_custom_motifs(motif_path, custom)
+                    st.session_state["studio_motifs"] = {
+                        **get_default_motifs(), **custom
+                    }
+                st.session_state["studio_groups"] = parsed
+                st.session_state["studio_canvas_revision"] += 1
+                st.rerun()
+            except (ValueError, OSError) as exc:
+                st.error(str(exc))
+
+    candidates: list[Candidate] = []
+    try:
+        sequence = groups_to_sequence(edited_groups, motifs)
+        architecture = groups_to_architecture(edited_groups, motifs)
+        if sequence:
+            candidates = [Candidate(safe_label(name), sequence, architecture)]
+    except ValueError as exc:
+        st.warning(str(exc))
+
+    if candidates:
+        counts = count_motifs(edited_groups, motifs)
+        a, b, c = st.columns(3)
+        a.metric("Amino acids", len(sequence))
+        b.metric("Motifs", sum(counts.values()))
+        c.metric("Groups", len(edited_groups))
+        with st.expander("Exact sequence and composition"):
+            st.code(sequence, language="text")
+            st.caption(architecture)
+            st.dataframe(
+                pd.DataFrame([
+                    {"Motif": n, "Count": k, "Fraction": k / sum(counts.values())}
+                    for n, k in counts.items()
+                ]), hide_index=True, use_container_width=True,
+            )
+        st.download_button(
+            "Download sequence FASTA",
+            data=f">{safe_label(name)}\n{sequence}\n",
+            file_name=f"{safe_label(name)}.fasta", mime="text/plain",
+        )
     else:
-        st.caption("Keep composition constant while comparing how motif arrangement affects compaction.")
+        st.info("Use the palette above to add a motif and begin your ELP.")
+
+    with st.expander("Optional: build a composition-matched two-motif library"):
+        st.caption("Use the same saved motif palette to generate alternating, diblock, central and shuffled designs.")
         p1, p2, p3 = st.columns(3)
         with p1:
-            prefix = st.text_input("Library name", "VGIP_screen")
-            motif_a = st.selectbox("Motif A", ["VPGVG", "IPAVG", "VPGIG", "VPGKG", "VPGEG", "VPAVG"])
+            prefix_name = st.text_input("Library name", "VGIP_screen")
+            motif_names = list(motifs)
+            motif_a = st.selectbox("Motif A", motif_names, key="lib_motif_a")
         with p2:
             motif_b = st.selectbox(
-                "Motif B", ["IPAVG", "VPGVG", "VPGIG", "VPGKG", "VPGEG", "VPAVG"]
+                "Motif B", motif_names, index=min(1, len(motif_names)-1),
+                key="lib_motif_b",
             )
         with p3:
-            n_motifs = st.number_input("Motifs per sequence", 2, 2000, 84)
-        st.caption("Fraction of motif B in each design")
+            n_motifs = st.number_input("Motifs per design", 2, 2000, 84)
         fractions = st.multiselect(
-            "Composition points",
-            [0.0, 0.1, 0.25, 0.31, 0.5, 0.67, 0.75, 0.86, 0.9, 1.0],
+            "Motif B fractions", [0.0, 0.1, 0.25, 0.31, 0.5, 0.67, 0.75, 0.86, 0.9, 1.0],
             default=[0.1, 0.31, 0.5, 0.67, 0.86],
             format_func=lambda x: f"{x:.0%} B",
         )
         architectures = st.multiselect(
-            "Architectures",
-            ["alternating", "diblock", "central", "shuffled"],
+            "Architectures", ["alternating", "diblock", "central", "shuffled"],
             default=["alternating", "diblock", "central", "shuffled"],
         )
         seed = st.number_input("Shuffle seed", 0, 999999, 1)
-        try:
-            candidates = make_library(
-                safe_label(prefix), motif_a, motif_b, int(n_motifs),
-                fractions, architectures, seed=int(seed),
+        if st.button("Generate library"):
+            try:
+                library = make_library(
+                    safe_label(prefix_name),
+                    motifs[motif_a].sequence, motifs[motif_b].sequence,
+                    int(n_motifs), fractions, architectures, seed=int(seed),
+                )
+                st.session_state["studio_library"] = library
+            except ValueError as exc:
+                st.error(str(exc))
+        library = st.session_state.get("studio_library", [])
+        if library:
+            preview(library)
+            st.download_button(
+                "Download library FASTA",
+                data="".join(f">{c.name}\n{c.sequence}\n" for c in library),
+                file_name="elp_library.fasta", mime="text/plain",
             )
-        except ValueError as exc:
-            st.warning(str(exc))
-    if candidates:
-        preview(candidates)
-        st.session_state["design_candidates"] = candidates
-        st.download_button(
-            "Download FASTA",
-            data="".join(f">{c.name}\n{c.sequence}\n" for c in candidates),
-            file_name="elp_designs.fasta", mime="text/plain",
-        )
-    else:
-        st.session_state["design_candidates"] = []
+            use_library = st.checkbox("Prepare this library instead of the single ELP")
+            if use_library:
+                candidates = library
 
     st.divider()
     st.subheader("Prepare simulations")
-    st.caption("The same conditions are applied to every design. Existing run folders will not be overwritten.")
+    st.caption("All designs use the same conditions. Existing simulation folders will never be overwritten.")
     batch_name = st.text_input("Experiment name", "first_test")
     s1, s2, s3, s4 = st.columns(4)
     with s1:
@@ -173,8 +285,10 @@ with design_tab:
         ph = st.number_input("pH", 0.0, 14.0, 7.0)
         ionic = st.number_input("Ionic strength (M)", 0.0, 5.0, 0.17)
         first_seed = st.number_input("Starting random seed", 0, 2147483646, 1)
-    st.caption(f"{int(frames) * int(save_every):,} integration steps per sequence; "
-               f"{len(candidates)} sequence(s), one single-chain run each.")
+    st.caption(
+        f"{int(frames) * int(save_every):,} integration steps per sequence; "
+        f"{len(candidates)} sequence(s), one single-chain simulation each."
+    )
     if st.button("Prepare designs", type="primary", disabled=not candidates):
         try:
             b = load_or_create_batch(batch_name)
@@ -193,8 +307,7 @@ with design_tab:
             st.success(f"Prepared {len(prepared)} run(s) in '{b.name}'. Open Simulate to start.")
         except Exception as exc:
             st.error(f"Preparation stopped: {exc}")
-            st.caption("Previously prepared sequences have been retained; inspect the batch before retrying.")
-
+            st.caption("Previously prepared sequences are retained; inspect the batch before retrying.")
 
 with simulate_tab:
     st.subheader("Your simulation queues")
