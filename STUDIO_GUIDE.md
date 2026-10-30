@@ -72,7 +72,7 @@ python -m calvados_library_builder.analysis "runs\first_test\test_vpgvg" --strid
 Scientific definitions match the selected thesis convention:
 
 - Mass-weighted Rg, coordinates Å → nm.
-- Default `Rg_theta(N) = 4.3037 * sqrt((N - 1) / 419) nm`.
+- Default `Rg_theta(N) = sqrt(2 * 0.40 nm * 0.38 nm * (N - 1) / 6)`.\n  Thus `Rg_theta(420) = 4.608 nm` (419 backbone bonds).
   This is the thesis's 420-residue calibration, **not** a universal polymer
   ideal-chain value. The reference threshold is editable in Analyze.
 - Collapsed when `Rg < Rg_theta` (no hysteresis).
