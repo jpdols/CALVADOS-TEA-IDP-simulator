@@ -35,7 +35,7 @@ DEFAULT_BOX_SIZE = 50.0
 DEFAULT_N_FRAMES = 50_000
 DEFAULT_SAVE_EVERY = 1_000
 
-DEFAULT_PLATFORM = "CUDA"
+DEFAULT_PLATFORM = "CPU"
 
 DEFAULT_TOPOLOGY = "center"
 
@@ -51,6 +51,7 @@ DEFAULT_CHARGE_TERMINI = "both"
 
 DEFAULT_REPLICATE = 1
 DEFAULT_SEED = 1
+SUPPORTED_PLATFORMS = ("CPU", "CUDA")
 
 DEFAULT_OUTPUT_DIR = RUNS_DIR
 
@@ -284,6 +285,9 @@ def validate_config(
     # --------------------------------------------------------
     # Conditions
     # --------------------------------------------------------
+
+    if config.platform not in SUPPORTED_PLATFORMS:
+        raise ValueError(f"CALVADOS supports only {SUPPORTED_PLATFORMS}; got {config.platform!r}")
 
     if config.temperature <= 0:
         raise ValueError(
