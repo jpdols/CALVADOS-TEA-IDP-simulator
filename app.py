@@ -24,6 +24,8 @@ from calvados_library_builder.diagnostics import available_platforms
 from calvados_library_builder.preflight import inspect_run
 from calvados_library_builder.prepare import prepare_simulation
 from calvados_library_builder.runner import get_run_summary, stop_run
+from calvados_library_builder.bulk_import import parse_sequence_library
+from calvados_library_builder.pdf_report import export_comparison_pdf
 from calvados_library_builder.motifs import get_default_motifs, create_motif
 from calvados_library_builder.motif_canvas import motif_canvas
 from calvados_library_builder.studio_sequence import (
@@ -37,6 +39,18 @@ from calvados_library_builder.studio_sequence import (
 st.set_page_config(page_title="ELP Studio", page_icon="🧬", layout="wide")
 st.title("ELP Studio")
 st.caption("Design a protein • simulate with CALVADOS • inspect molecular behaviour")
+st.markdown(
+    """
+    <style>
+    html, body, [data-testid="stApp"], [data-testid="stAppViewContainer"],
+    [data-testid="stWidgetLabel"], button, input, textarea {
+        font-family: "Suisse Intl", "Suisse", "Helvetica Neue", Arial, sans-serif;
+    }
+    </style>
+    """, unsafe_allow_html=True,
+)
+st.caption("Created by Joep Dols · Nikolina Šoštarić Lab · TU Delft")
+
 
 ROOT = RUNS_DIR
 ROOT.mkdir(parents=True, exist_ok=True)
@@ -241,51 +255,53 @@ with design_tab:
     else:
         st.info("Use the palette above to add a motif and begin your ELP.")
 
-    with st.expander("Optional: build a composition-matched two-motif library"):
-        st.caption("Use the same saved motif palette to generate alternating, diblock, central and shuffled designs.")
-        p1, p2, p3 = st.columns(3)
-        with p1:
-            prefix_name = st.text_input("Library name", "VGIP_screen")
-            motif_names = list(motifs)
-            motif_a = st.selectbox("Motif A", motif_names, key="lib_motif_a")
-        with p2:
-            motif_b = st.selectbox(
-                "Motif B", motif_names, index=min(1, len(motif_names)-1),
-                key="lib_motif_b",
-            )
-        with p3:
-            n_motifs = st.number_input("Motifs per design", 2, 2000, 84)
-        fractions = st.multiselect(
-            "Motif B fractions", [0.0, 0.1, 0.25, 0.31, 0.5, 0.67, 0.75, 0.86, 0.9, 1.0],
-            default=[0.1, 0.31, 0.5, 0.67, 0.86],
-            format_func=lambda x: f"{x:.0%} B",
+    st.divider()
+    st.subheader("Import a sequence library")
+    st.caption(
+        "Have 10, 50 or more ELPs already designed? Upload one multi-FASTA or "
+        "CSV file (name, sequence), or paste multi-FASTA. "
+        "You can prepare all sequences without using the visual designer."
+    )
+    upload = st.file_uploader(
+        "Multi-FASTA or CSV library", type=["fasta", "fa", "faa", "txt", "csv"],
+        key="studio_library_upload",
+        help="FASTA example: >ELP_01 followed by its one-letter sequence. "
+             "CSV requires columns name and sequence. Each design becomes a separate run.",
+    )
+    with st.expander("Or paste multi-FASTA"):
+        pasted_library = st.text_area(
+            "Multi-FASTA", key="studio_multi_fasta", height=145,
+            placeholder=">ELP_01\nVPGVGVPGVG\n>ELP_02\nVPGVGIPAVG",
         )
-        architectures = st.multiselect(
-            "Architectures", ["alternating", "diblock", "central", "shuffled"],
-            default=["alternating", "diblock", "central", "shuffled"],
-        )
-        seed = st.number_input("Shuffle seed", 0, 999999, 1)
-        if st.button("Generate library"):
-            try:
-                library = make_library(
-                    safe_label(prefix_name),
-                    motifs[motif_a].sequence, motifs[motif_b].sequence,
-                    int(n_motifs), fractions, architectures, seed=int(seed),
-                )
-                st.session_state["studio_library"] = library
-            except ValueError as exc:
-                st.error(str(exc))
-        library = st.session_state.get("studio_library", [])
-        if library:
-            preview(library)
-            st.download_button(
-                "Download library FASTA",
-                data="".join(f">{c.name}\n{c.sequence}\n" for c in library),
-                file_name="elp_library.fasta", mime="text/plain",
+    if st.button("Load imported library", disabled=upload is None and not pasted_library.strip()):
+        try:
+            if upload is not None:
+                contents = upload.getvalue().decode("utf-8-sig")
+                filename = upload.name
+            else:
+                contents = pasted_library
+                filename = "pasted.fasta"
+            st.session_state["studio_imported_library"] = parse_sequence_library(
+                contents, filename=filename,
             )
-            use_library = st.checkbox("Prepare this library instead of the single ELP")
-            if use_library:
-                candidates = library
+            st.success(
+                f"Loaded {len(st.session_state['studio_imported_library'])} sequences."
+            )
+        except (UnicodeDecodeError, ValueError) as exc:
+            st.error(f"Library import failed: {exc}")
+    imported_library = st.session_state.get("studio_imported_library", [])
+    if imported_library:
+        preview(imported_library)
+        source = st.radio(
+            "Sequences to prepare",
+            ["Imported library", "Current visual ELP"],
+            horizontal=True, key="studio_source_choice",
+        )
+        if source == "Imported library":
+            candidates = imported_library
+        if st.button("Clear imported library"):
+            st.session_state.pop("studio_imported_library", None)
+            st.rerun()
 
     st.divider()
     st.subheader("Prepare simulations")
@@ -293,18 +309,18 @@ with design_tab:
     batch_name = st.text_input("Experiment name", "first_test")
     s1, s2, s3, s4 = st.columns(4)
     with s1:
-        temperature = st.selectbox("Temperature (K)", list(range(300, 401, 10)), index=7)
+        temperature = st.selectbox("Temperature (K)", list(range(300, 401, 10)), index=7, help="Simulation temperature in kelvin. The CALVADOS residue interaction table is temperature-dependent; choose the temperature of the desired experiment.")
     with s2:
-        platform = st.selectbox("Compute", choices)
+        platform = st.selectbox("Compute", choices, help="OpenMM execution backend. CPU works without a compatible NVIDIA GPU; CUDA requires a functioning CUDA platform. This changes performance, not the intended force field.")
     with s3:
-        frames = st.number_input("Saved frames", 2, 50000, 50)
+        frames = st.number_input("Saved frames", 2, 50000, 50, help="How many trajectory configurations to save in the DCD. More frames provide better temporal sampling but larger files. Total steps = frames × steps per frame.")
     with s4:
-        save_every = st.number_input("Steps per frame", 1, 1000000, 1000)
+        save_every = st.number_input("Steps per frame", 1, 1000000, 1000, help="OpenMM integration steps between saved trajectory frames. CALVADOS uses a 0.01 ps step: 1000 steps = 10 ps = 0.01 ns between frames.")
     with st.expander("Advanced simulation settings"):
-        box_nm = st.number_input("Box length (nm)", 5.0, 500.0, 50.0)
-        ph = st.number_input("pH", 0.0, 14.0, 7.0)
-        ionic = st.number_input("Ionic strength (M)", 0.0, 5.0, 0.17)
-        first_seed = st.number_input("Starting random seed", 0, 2147483646, 1)
+        box_nm = st.number_input("Box length (nm)", 5.0, 500.0, 50.0, help="Side length of the periodic cubic simulation box in nanometers. It must comfortably contain the polymer and avoid unwanted interactions with periodic images.")
+        ph = st.number_input("pH", 0.0, 14.0, 7.0, help="Solution pH. Affects residue protonation / effective charge and therefore electrostatic interactions according to the CALVADOS model.")
+        ionic = st.number_input("Ionic strength (M)", 0.0, 5.0, 0.17, help="Ionic strength in mol/L. Controls Debye electrostatic screening; higher salt generally screens charge interactions more strongly.")
+        first_seed = st.number_input("Starting random seed", 0, 2147483646, 1, help="Random number seed for reproducibility. In a library, each successive sequence receives an incremented seed. Use different seeds for independent replicate runs.")
     st.caption(
         f"{int(frames) * int(save_every):,} integration steps per sequence; "
         f"{len(candidates)} sequence(s), one single-chain simulation each."
@@ -506,6 +522,29 @@ with analyze_tab:
             "Download comparison CSV", table.to_csv(index=False),
             file_name="elp_library_summary.csv", mime="text/csv",
         )
+        st.subheader("Export thesis-style comparison report")
+        st.caption(
+            "Landscape PDF with motif-ball architectures and five metric plots: "
+            "fraction collapsed, mean Rg, mean compact Rg, k collapse and k escape. "
+            "Results are taken from existing summary CSVs; missing metrics remain unreported."
+        )
+        if st.button("Generate comparison PDF", type="primary"):
+            try:
+                report_motifs = {
+                    **get_default_motifs(), **load_custom_motifs(ROOT / "_custom_motifs.json")
+                }
+                report_bytes = export_comparison_pdf(table, motifs=report_motifs)
+                st.session_state["studio_comparison_pdf"] = report_bytes
+                st.success("Comparison PDF is ready.")
+            except Exception as exc:
+                st.error(f"Could not produce comparison PDF: {exc}")
+        if st.session_state.get("studio_comparison_pdf"):
+            st.download_button(
+                "Download comparison PDF",
+                data=st.session_state["studio_comparison_pdf"],
+                file_name="ELP_thesis_architecture_comparison.pdf",
+                mime="application/pdf",
+            )
     else:
         st.caption("Analyze one or more trajectories to see cross-sequence comparisons here.")
 
