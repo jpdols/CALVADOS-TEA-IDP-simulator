@@ -1,9 +1,18 @@
-name: calvados-elp-builder
+# Start in the cloned repository root:
+#   conda env create -f environment.yml
+#   conda activate calvados-elp-local
+#   python -m calvados_library_builder.diagnostics
+#   streamlit run app.py
+#
+# The editable pip installation pulls pinned CALVADOS v0.9.1 and its
+# OpenMM (CUDA 12 extra) requirements automatically. Selecting CPU in
+# the application does not require an NVIDIA GPU.
+name: calvados-elp-local
 channels:
   - conda-forge
 dependencies:
-  - python=3.10
+  - python=3.11
   - pip
   - git
   - pip:
-      - -e .[app,analysis,dev]
+      - -e .[app,analysis]
