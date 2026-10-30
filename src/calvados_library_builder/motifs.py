@@ -43,6 +43,11 @@ DEFAULT_MOTIFS = {
         "sequence": "VPAVG",
         "color": "#FF66B3",
     },
+    "RGD": {
+        "label": "RGD block",
+        "sequence": "AVTGRGDSPASS",
+        "color": "#7944AC",
+    },
 }
 
 
