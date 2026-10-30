@@ -29,6 +29,7 @@ from calvados_library_builder.studio_sequence import (
     default_groups, groups_to_sequence, groups_to_architecture,
     count_motifs, normalize_groups, extract_single_fasta,
     segment_raw_sequence, load_custom_motifs, save_custom_motifs,
+    load_draft, save_draft,
 )
 
 
@@ -102,15 +103,24 @@ with design_tab:
         except (ValueError, OSError, KeyError) as exc:
             st.session_state["studio_motifs"] = get_default_motifs()
             st.error(f"Could not load custom motif library: {exc}")
-    st.session_state.setdefault("studio_groups", default_groups())
-    st.session_state.setdefault("studio_canvas_revision", 0)
     motifs = st.session_state["studio_motifs"]
+    draft_path = ROOT / "_current_elp_draft.json"
+    if "studio_groups" not in st.session_state:
+        try:
+            draft_name, draft_groups = load_draft(draft_path, motifs)
+        except (ValueError, OSError, KeyError) as exc:
+            draft_name, draft_groups = "test_sequence", default_groups()
+            st.warning(f"Could not restore saved ELP draft: {exc}")
+        st.session_state["studio_groups"] = draft_groups
+        st.session_state.setdefault("studio_sequence_name", draft_name)
+    st.session_state.setdefault("studio_canvas_revision", 0)
 
-    name = st.text_input("Sequence name", "test_sequence", key="studio_sequence_name")
+    name = st.text_input("Sequence name", key="studio_sequence_name")
+    st.caption("Autosaved locally: motif palette and current ELP are restored when you reopen the app.")
 
     # Custom motif editor stays compact and does not replace existing colors.
     with st.expander("Motif palette · add your own color and amino-acid sequence"):
-        st.caption("The six built-in motifs use the thesis palette. New motifs are saved on this computer.")
+        st.caption("The standard motifs retain their thesis colors, including purple RGD. New motifs are saved on this computer.")
         colors = st.columns(3)
         for idx, motif in enumerate(motifs.values()):
             with colors[idx % 3]:
@@ -159,6 +169,15 @@ with design_tab:
     try:
         edited_groups = normalize_groups(canvas.groups, motifs)
         st.session_state["studio_groups"] = edited_groups
+        # Save only on changes. Browser refreshes and Streamlit reruns
+        # then restore the exact last valid sequence and motif count.
+        save_key = (name, repr(edited_groups))
+        if st.session_state.get("_studio_last_saved") != save_key:
+            try:
+                save_draft(draft_path, name, edited_groups, motifs)
+                st.session_state["_studio_last_saved"] = save_key
+            except (OSError, ValueError) as exc:
+                st.error(f"Could not save ELP draft: {exc}")
     except (ValueError, TypeError) as exc:
         edited_groups = st.session_state["studio_groups"]
         st.error(f"Invalid architecture: {exc}")
@@ -203,7 +222,7 @@ with design_tab:
         a, b, c = st.columns(3)
         a.metric("Amino acids", len(sequence))
         b.metric("Motifs", sum(counts.values()))
-        c.metric("Groups", len(edited_groups))
+        c.metric("Blocks", len(edited_groups))
         with st.expander("Exact sequence and composition"):
             st.code(sequence, language="text")
             st.caption(architecture)
