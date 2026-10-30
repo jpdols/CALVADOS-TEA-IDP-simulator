@@ -503,8 +503,20 @@ with analyze_tab:
             st.dataframe(pd.DataFrame([result]), use_container_width=True)
     st.divider()
     st.subheader("Compare analyzed sequences")
-    summary_files = [p / "analysis" / "summary.csv" for p in runs]
-    summary_files = [p for p in summary_files if p.is_file()]
+    analyzed_runs = [p for p in runs if (p / "analysis" / "summary.csv").is_file()]
+    experiments = sorted({p.parent.name for p in analyzed_runs})
+    experiment_filter = st.selectbox(
+        "Experiment to compare",
+        ["All experiments", *experiments],
+        index=1 if len(experiments) == 1 else 0,
+        help="Restrict the plots and PDF report to one experiment (batch). "
+             "Choose All experiments for a cross-batch comparison.",
+    ) if experiments else "All experiments"
+    comparison_runs = [
+        p for p in analyzed_runs
+        if experiment_filter == "All experiments" or p.parent.name == experiment_filter
+    ]
+    summary_files = [p / "analysis" / "summary.csv" for p in comparison_runs]
     if summary_files:
         table = pd.concat((pd.read_csv(p) for p in summary_files), ignore_index=True)
         table = table.drop(columns=["std_rg_nm", "iqr_rg_nm"], errors="ignore")
