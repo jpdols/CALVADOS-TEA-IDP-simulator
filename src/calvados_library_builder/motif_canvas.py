@@ -37,19 +37,21 @@ CSS = """
 JS = """
 export default function(component) {
   const {parentElement:root,data,setStateValue}=component;
+  const host=root.querySelector(".elp-motif-root");
+  if(!host)return;
   const initial=Array.isArray(data?.groups)?data.groups:[];
   const motifs=data?.motifs||{};
   const groupKey=data?.revision??0;
-  if(!root.__elp || root.__elp.revision!==groupKey) {
-    root.__elp={groups:structuredClone(initial),selected:-1,revision:groupKey};
+  if(!host.__elp || host.__elp.revision!==groupKey) {
+    host.__elp={groups:structuredClone(initial),selected:-1,revision:groupKey};
   }
-  const model=root.__elp;
-  root.replaceChildren();
+  const model=host.__elp;
+  host.replaceChildren();
   const el=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;};
   const valid=()=>Array.isArray(model.groups)&&model.groups.length<=2000&&model.groups.every(g=>Array.isArray(g.segments));
   const commit=()=>{if(!valid())return;setStateValue("groups",structuredClone(model.groups));render();};
   const ball=(motif)=>{const b=el("span","ball");b.style.backgroundColor=motifs[motif]?.color||"#9CA3AF";b.title=motif+" ("+(motifs[motif]?.sequence||"")+")";return b;};
-  const canvas=el("div","canvas");root.append(canvas);
+  const canvas=el("div","canvas");host.append(canvas);
   const head=el("div","canvas-head");head.append(el("div","canvas-title","Your ELP architecture"),el("div","hint","Drag a group to reorder • drop on a group to merge • click to edit"));canvas.append(head);
   const palette=el("div","palette");canvas.append(palette);
   const lane=el("div","lane");lane.setAttribute("aria-label","Drag-and-drop motif sequence");canvas.append(lane);
