@@ -43,7 +43,8 @@ def test_rg_theta_reference_and_rates():
     assert result["n_escape_transitions"] == 1
     assert result["k_collapse_per_ns"] == pytest.approx(1 / .03)
     assert result["k_escape_per_ns"] == pytest.approx(1 / .02)
-    assert np.isnan(result["mean_collapsed_dwell_ns"])  # edge censoring
+    assert result["mean_collapsed_dwell_ns"] == pytest.approx(.02)
+    assert np.isnan(result["mean_expanded_dwell_ns"])  # both expanded segments censored
 
 
 def test_preflight_detects_missing_and_accepts_complete(tmp_path):
