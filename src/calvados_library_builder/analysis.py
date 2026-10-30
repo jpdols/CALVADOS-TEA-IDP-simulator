@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+from .replicates import read_replicate_info
 from pathlib import Path
 
 import numpy as np
@@ -32,6 +33,15 @@ def theta_rg(n: int, reference_nm: float = THETA_REF_NM,
     if n < 2 or reference_length < 2 or reference_nm <= 0:
         raise ValueError("Theta model requires N>=2 and positive reference values.")
     return float(reference_nm * ((n - 1) / (reference_length - 1)) ** exponent)
+
+
+def discard_initial_frames(total_frames: int, fraction: float = 0.0) -> int:
+    """Discard floor(fraction*N) original DCD frames before any striding."""
+    if not 0 <= fraction < 1:
+        raise ValueError("Discard fraction must be in [0, 1).")
+    if total_frames < 2:
+        raise ValueError("Trajectory requires at least two frames.")
+    return math.floor(total_frames * fraction)
 
 
 def summarize_rg(rg_nm, frame_dt_ns: float, threshold_nm: float) -> dict:
@@ -128,7 +138,8 @@ def analyze_run(run_dir: Path, stride: int = 1,
                 theta_ref_nm: float = THETA_REF_NM,
                 theta_ref_length: int = THETA_REF_LENGTH,
                 theta_exponent: float = THETA_EXPONENT,
-                out_dir: Path | None = None) -> dict:
+                out_dir: Path | None = None,
+                discard_fraction: float = 0.0) -> dict:
     """Analyze a completed, single-chain trajectory; output reproducible artifacts."""
     if stride < 1:
         raise ValueError("stride must be at least 1")
@@ -157,8 +168,14 @@ def analyze_run(run_dir: Path, stride: int = 1,
         masses = np.ones(len(seq), dtype=float)
     masses /= masses.sum()
 
+    total_frames = len(universe.trajectory)
+    removed = discard_initial_frames(total_frames, discard_fraction)
+    selected_indices = list(range(removed, total_frames, stride))
+    if len(selected_indices) < 2:
+        raise ValueError("Analysis requires at least two retained frames. Reduce stride or discard.")
     rg = []
-    for ts in universe.trajectory[::stride]:
+    for index in selected_indices:
+        ts = universe.trajectory[index]
         xyz = np.asarray(universe.atoms.positions, dtype=float) / 10  # Angstrom to nm
         center = np.sum(xyz * masses[:, None], axis=0)
         rg.append(float(np.sqrt(np.sum(masses * np.sum((xyz-center)**2, axis=1)))))
@@ -168,8 +185,17 @@ def analyze_run(run_dir: Path, stride: int = 1,
     sample_dt = float(cfg["wfreq"]) * TIMESTEP_PS / 1000 * stride
     threshold = theta_rg(len(seq), theta_ref_nm, theta_ref_length, theta_exponent)
     values = summarize_rg(rg, sample_dt, threshold)
+    meta = read_replicate_info(run_dir)
     values.update({
         "name": name,
+        "sequence_name": meta.get("sequence_name", name),
+        "replicate": int(meta.get("replicate", 1)),
+        "replicate_count": int(meta.get("replicate_count", 1)),
+        "random_seed": meta.get("random_seed"),
+        "experiment": meta.get("experiment", run_dir.parent.name),
+        "total_trajectory_frames": total_frames,
+        "discard_fraction": discard_fraction,
+        "discarded_frames": removed,
         "temperature_K": float(cfg["temp"]),
         "aa_length": len(seq),
         "sequence": seq,
@@ -181,8 +207,8 @@ def analyze_run(run_dir: Path, stride: int = 1,
     out_dir.mkdir(parents=True, exist_ok=True)
 
     samples = pd.DataFrame({
-        "frame": np.arange(len(rg)) * stride + 1,
-        "time_ns": (np.arange(len(rg)) + 1) * sample_dt,
+        "frame": np.asarray(selected_indices) + 1,
+        "time_ns": (np.asarray(selected_indices) + 1) * (sample_dt / stride),
         "rg_nm": rg,
         "collapsed": rg < threshold,
         "threshold_nm": threshold,
@@ -227,6 +253,10 @@ def analyze_run(run_dir: Path, stride: int = 1,
         "pbc_warning": "Coordinates assumed contiguous; wrapped chains may overestimate Rg",
         "time_step_ps": TIMESTEP_PS,
         "stride": stride,
+        "discard_fraction": discard_fraction,
+        "discarded_frames": removed,
+        "total_trajectory_frames": total_frames,
+        "discard_rule": "floor(fraction * total DCD frames), before striding",
         "note": "Short simulations or sparse transitions produce unreliable kinetic estimates.",
     }
     (out_dir / "methods.json").write_text(json.dumps(methods, indent=2), encoding="utf-8")
@@ -238,9 +268,12 @@ def main():
     parser.add_argument("run_dir", type=Path)
     parser.add_argument("--stride", type=int, default=1)
     parser.add_argument("--theta-ref-nm", type=float, default=THETA_REF_NM)
+    parser.add_argument("--discard-first-10-percent", action="store_true",
+                        help="Exclude floor(0.10 * DCD frames) before striding and statistics.")
     args = parser.parse_args()
     print(json.dumps(analyze_run(args.run_dir, stride=args.stride,
-                                 theta_ref_nm=args.theta_ref_nm), indent=2))
+                                 theta_ref_nm=args.theta_ref_nm,
+                                 discard_fraction=0.1 if args.discard_first_10_percent else 0.0), indent=2))
 
 
 if __name__ == "__main__":
