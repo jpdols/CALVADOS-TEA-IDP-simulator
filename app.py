@@ -439,7 +439,7 @@ with analyze_tab:
                 st.caption("Analysis requires a complete readable DCD and a matching single-chain PDB.")
         summary_file = target / "analysis" / "summary.csv"
         if summary_file.exists():
-            result = pd.read_csv(summary_file).iloc[0]
+            result = pd.read_csv(summary_file).drop(columns=["std_rg_nm", "iqr_rg_nm"], errors="ignore").iloc[0]
             a, b, c, d = st.columns(4)
             a.metric("Mean Rg", f"{result['mean_rg_nm']:.2f} nm")
             b.metric("Collapsed", f"{result['fraction_collapsed']:.1%}")
@@ -461,7 +461,7 @@ with analyze_tab:
                     st.image(str(picture), caption="Rg distribution")
             st.download_button(
                 "Download analysis summary CSV",
-                summary_file.read_bytes(), file_name=f"{target.name}_rg_summary.csv",
+                pd.DataFrame([result]).to_csv(index=False).encode("utf-8"), file_name=f"{target.name}_rg_summary.csv",
                 mime="text/csv",
             )
             st.dataframe(pd.DataFrame([result]), use_container_width=True)
@@ -471,6 +471,7 @@ with analyze_tab:
     summary_files = [p for p in summary_files if p.is_file()]
     if summary_files:
         table = pd.concat((pd.read_csv(p) for p in summary_files), ignore_index=True)
+        table = table.drop(columns=["std_rg_nm", "iqr_rg_nm"], errors="ignore")
         cols = ["name", "temperature_K", "mean_rg_nm", "rg_theta_nm",
                 "fraction_collapsed", "k_collapse_per_ns", "k_escape_per_ns",
                 "mean_rg_collapsed_nm", "mean_rg_expanded_nm", "n_frames"]
