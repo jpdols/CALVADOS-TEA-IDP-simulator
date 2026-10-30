@@ -1,13 +1,13 @@
 # Start in the cloned repository root:
 #   conda env create -f environment.yml
-#   conda activate calvados-elp-local
+#   conda activate calvados-tea-idp-simulator
 #   python -m calvados_library_builder.diagnostics
 #   streamlit run app.py
 #
 # The editable pip installation pulls pinned CALVADOS v0.9.1 and its
 # OpenMM (CUDA 12 extra) requirements automatically. Selecting CPU in
 # the application does not require an NVIDIA GPU.
-name: calvados-elp-local
+name: calvados-tea-idp-simulator
 channels:
   - conda-forge
 dependencies:
