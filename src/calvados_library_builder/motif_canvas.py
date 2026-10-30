@@ -9,7 +9,7 @@ from __future__ import annotations
 import streamlit as st
 
 CSS = """
-.elp-board{font-family:var(--st-font,system-ui);color:var(--st-text-color);padding:16px;border:1px solid var(--st-border-color,#d6dbe1);border-radius:14px;background:var(--st-secondary-background-color,#f8fafc)}
+.elp-board{font-family:"Suisse Intl","Suisse","Helvetica Neue",Arial,sans-serif;color:var(--st-text-color);padding:16px;border:1px solid var(--st-border-color,#d6dbe1);border-radius:14px;background:var(--st-secondary-background-color,#f8fafc)}
 .elp-header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
 .elp-title{font-size:15px;font-weight:700}.elp-hint{font-size:12px;opacity:.7}
 .elp-palette{display:flex;flex-wrap:wrap;gap:7px;margin-top:13px}
@@ -20,10 +20,10 @@ CSS = """
 .elp-run{display:inline-flex;position:relative;flex-direction:column;align-items:center;min-width:53px;padding:6px 8px 10px;margin:10px 0 5px;border-radius:11px;cursor:grab;border:1px solid transparent;user-select:none}
 .elp-run:hover,.elp-run:focus-within,.elp-run:focus-visible{border-color:var(--st-primary-color,#a78bfa);background:var(--st-secondary-background-color,#eef2f7);z-index:5}
 .elp-run.dragging{opacity:.35}.elp-run:active{cursor:grabbing}
-.elp-beads{display:flex;align-items:center;gap:3px;max-width:265px;flex-wrap:wrap;justify-content:center}
-.elp-bead{display:inline-block;flex:0 0 19px;width:19px;height:19px;border-radius:50%;border:1px solid #0002;box-shadow:inset 0 -3px 4px #0002}
+.elp-beads{display:flex;align-items:center;justify-content:center;min-width:42px;padding:2px 4px}
+.elp-bead{display:inline-block;flex:0 0 25px;width:25px;height:25px;border-radius:50%;border:1px solid #0002;box-shadow:inset 0 -3px 4px #0002}
 .elp-more{font-size:11px;font-weight:600;opacity:.65}
-.elp-bracket{margin-top:5px;width:calc(100% - 7px);height:9px;border-left:1.5px solid var(--st-text-color,#333);border-right:1.5px solid var(--st-text-color,#333);border-bottom:1.5px solid var(--st-text-color,#333);opacity:.55}
+.elp-bracket{margin-top:6px;width:calc(100% - 13px);height:8px;border-left:1.5px solid var(--st-text-color,#333);border-right:1.5px solid var(--st-text-color,#333);border-bottom:1.5px solid var(--st-text-color,#333);opacity:.55}
 .elp-count{font-size:11px;font-weight:700;margin-top:3px;white-space:nowrap}
 .elp-runname{font-size:10px;opacity:.65;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .elp-gap{width:12px;min-height:54px;border-radius:8px;align-self:center}
@@ -166,11 +166,10 @@ export default function(component) {
       };
       controls.append(number);run.append(controls);
       const beads=elt("div","elp-beads");
-      for(let j=0;j<Math.min(item.count,12);j++){
-        const b=elt("span","elp-bead");b.style.backgroundColor=motifs[item.motif]?.color||"#9CA3AF";
-        b.title=item.motif+" ("+motifs[item.motif]?.sequence+")";beads.append(b);
-      }
-      if(item.count>12)beads.append(elt("span","elp-more","+"+(item.count-12)));
+      const b=elt("span","elp-bead");
+      b.style.backgroundColor=motifs[item.motif]?.color||"#9CA3AF";
+      b.title=item.motif+" ("+motifs[item.motif]?.sequence+")";
+      beads.append(b);
       run.append(beads,elt("div","elp-bracket"),elt("span","elp-count","×"+item.count),
         elt("span","elp-runname",motifs[item.motif]?.label||item.motif));
       lane.append(run);gap(i+1);
