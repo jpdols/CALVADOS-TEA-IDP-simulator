@@ -283,6 +283,7 @@ def prepare_simulation(
         runtime=0,
 
         platform=config.platform,
+        random_number_seed=config.seed,
 
         restart=config.restart,
 
@@ -613,6 +614,8 @@ def parse_args():
         ),
     )
 
+    parser.add_argument("--seed", type=int, default=1)
+
     parser.add_argument(
         "--replicate",
         type=int,
@@ -674,6 +677,7 @@ def config_from_args(
         ),
 
         replicate=args.replicate,
+        seed=args.seed,
 
         output_dir=args.output_dir,
 
