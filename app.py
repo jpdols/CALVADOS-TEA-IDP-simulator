@@ -25,6 +25,10 @@ from calvados_library_builder.preflight import inspect_run
 from calvados_library_builder.prepare import prepare_simulation
 from calvados_library_builder.runner import get_run_summary, stop_run
 from calvados_library_builder.bulk_import import parse_sequence_library
+from calvados_library_builder.design_collection import (
+    add_to_collection, remove_from_collection, next_design_name,
+    save_collection, load_collection,
+)
 from calvados_library_builder.pdf_report import export_comparison_pdf
 from calvados_library_builder.replicate_summary import summarize_replicates
 from calvados_library_builder.replicates import (
@@ -142,6 +146,12 @@ with design_tab:
         st.session_state["studio_groups"] = draft_groups
         st.session_state.setdefault("studio_sequence_name", draft_name)
     st.session_state.setdefault("studio_canvas_revision", 0)
+
+    # The Add & New button queues a reset for the next rerun. Streamlit does
+    # not allow replacing an instantiated widget's session-state key in place.
+    pending_name = st.session_state.pop("_studio_new_design_name", None)
+    if pending_name is not None:
+        st.session_state["studio_sequence_name"] = pending_name
 
     name = st.text_input("Sequence name", key="studio_sequence_name")
     st.caption("Autosaved locally: motif palette and current ELP are restored when you reopen the app.")
@@ -268,57 +278,113 @@ with design_tab:
     else:
         st.info("Use the palette above to add a motif and begin your ELP.")
 
-    st.divider()
-    st.subheader("Import a sequence library")
-    st.caption(
-        "Have 10, 50 or more ELPs already designed? Upload one multi-FASTA or "
-        "CSV file (name, sequence), or paste multi-FASTA. "
-        "You can prepare all sequences without using the visual designer."
-    )
-    upload = st.file_uploader(
-        "Multi-FASTA or CSV library", type=["fasta", "fa", "faa", "txt", "csv"],
-        key="studio_library_upload",
-        help="FASTA example: >ELP_01 followed by its one-letter sequence. "
-             "CSV requires columns name and sequence. Each design becomes a separate run.",
-    )
-    with st.expander("Or paste multi-FASTA"):
-        pasted_library = st.text_area(
-            "Multi-FASTA", key="studio_multi_fasta", height=145,
-            placeholder=">ELP_01\nVPGVGVPGVG\n>ELP_02\nVPGVGIPAVG",
-        )
-    if st.button("Load imported library", disabled=upload is None and not pasted_library.strip()):
+    # Stage first; preparing CALVADOS inputs is a separate, explicit action.
+    collection_path = ROOT / "_design_collection.json"
+    if "studio_design_collection" not in st.session_state:
         try:
-            if upload is not None:
-                contents = upload.getvalue().decode("utf-8-sig")
-                filename = upload.name
-            else:
-                contents = pasted_library
-                filename = "pasted.fasta"
-            st.session_state["studio_imported_library"] = parse_sequence_library(
-                contents, filename=filename,
-            )
-            st.success(
-                f"Loaded {len(st.session_state['studio_imported_library'])} sequences."
-            )
-        except (UnicodeDecodeError, ValueError) as exc:
-            st.error(f"Library import failed: {exc}")
-    imported_library = st.session_state.get("studio_imported_library", [])
-    if imported_library:
-        preview(imported_library)
-        source = st.radio(
-            "Sequences to prepare",
-            ["Imported library", "Current visual ELP"],
-            horizontal=True, key="studio_source_choice",
-        )
-        if source == "Imported library":
-            candidates = imported_library
-        if st.button("Clear imported library"):
-            st.session_state.pop("studio_imported_library", None)
-            st.rerun()
+            st.session_state["studio_design_collection"] = load_collection(collection_path)
+        except (ValueError, OSError, KeyError, TypeError) as exc:
+            st.session_state["studio_design_collection"] = []
+            st.error(f"Could not restore saved design collection: {exc}")
+    staged = st.session_state["studio_design_collection"]
+
+    def store_design_collection(updated: list[Candidate]) -> None:
+        save_collection(collection_path, updated)
+        st.session_state["studio_design_collection"] = updated
 
     st.divider()
-    st.subheader("Prepare simulations")
-    st.caption("All designs use the same conditions. Existing simulation folders will never be overwritten.")
+    st.subheader("2. Add designs to your experiment")
+    st.caption(
+        "Add your current ELP to a collection, then design another. "
+        "Nothing is prepared or simulated until you click Prepare all below. "
+        "Your collection is saved between application sessions."
+    )
+    add_col, next_col = st.columns(2)
+    with add_col:
+        if st.button("Add current design", type="primary", disabled=not candidates):
+            try:
+                updated = add_to_collection(staged, candidates)
+                store_design_collection(updated)
+                st.success(f"Added {candidates[0].name} to the experiment collection.")
+                st.rerun()
+            except (ValueError, OSError) as exc:
+                st.error(f"Could not add design: {exc}")
+    with next_col:
+        if st.button("Add current & design another", disabled=not candidates):
+            try:
+                updated = add_to_collection(staged, candidates)
+                store_design_collection(updated)
+                st.session_state["_studio_new_design_name"] = next_design_name(updated)
+                st.session_state["studio_groups"] = []
+                st.session_state["studio_canvas_revision"] += 1
+                st.rerun()
+            except (ValueError, OSError) as exc:
+                st.error(f"Could not add design: {exc}")
+
+    with st.expander("Import several existing sequences at once (FASTA / CSV)"):
+        st.caption("Add an existing sequence library directly to the same collection, without using the motif editor.")
+        upload = st.file_uploader(
+            "Multi-FASTA or CSV library", type=["fasta", "fa", "faa", "txt", "csv"],
+            key="studio_library_upload",
+            help="FASTA has >NAME headers; CSV requires name and sequence columns.",
+        )
+        pasted_library = st.text_area(
+            "Or paste multi-FASTA", key="studio_multi_fasta", height=120,
+            placeholder=">ELP_01\\nVPGVGVPGVG\\n>ELP_02\\nVPGVGIPAVG",
+        )
+        if st.button("Add imported sequences to collection", disabled=upload is None and not pasted_library.strip()):
+            try:
+                if upload is not None:
+                    contents = upload.getvalue().decode("utf-8-sig")
+                    filename = upload.name
+                else:
+                    contents = pasted_library
+                    filename = "pasted.fasta"
+                new_designs = parse_sequence_library(contents, filename=filename)
+                updated = add_to_collection(staged, new_designs)
+                store_design_collection(updated)
+                st.success(f"Added {len(new_designs)} sequences to your collection.")
+                st.rerun()
+            except (UnicodeDecodeError, ValueError, OSError) as exc:
+                st.error(f"Import failed: {exc}")
+
+    staged = st.session_state["studio_design_collection"]
+    st.markdown(f"**Designs ready to prepare: {len(staged)}**")
+    if staged:
+        preview(staged)
+        st.download_button(
+            "Download staged collection FASTA",
+            data="".join(f">{c.name}\\n{c.sequence}\\n" for c in staged),
+            file_name="elp_staged_designs.fasta",
+            mime="text/plain",
+        )
+        selected_remove = st.selectbox(
+            "Remove a design from collection", [c.name for c in staged],
+            key="studio_remove_design_name",
+        )
+        remove_col, clear_col = st.columns(2)
+        with remove_col:
+            if st.button("Remove selected design"):
+                try:
+                    store_design_collection(remove_from_collection(staged, selected_remove))
+                    st.rerun()
+                except (ValueError, OSError) as exc:
+                    st.error(f"Could not remove design: {exc}")
+        with clear_col:
+            if st.button("Clear collection", help="Clears staged designs only; existing prepared simulations are not deleted."):
+                try:
+                    store_design_collection([])
+                    st.rerun()
+                except OSError as exc:
+                    st.error(f"Could not clear collection: {exc}")
+    else:
+        st.info("Your collection is empty. Add your first design above.")
+
+    candidates = staged
+
+    st.divider()
+    st.subheader("3. Prepare all simulations")
+    st.caption("The entire staged collection will use these settings. You can keep adding designs until you are ready; no existing run folders are overwritten.")
     batch_name = st.text_input("Experiment name", "first_test")
     s1, s2, s3, s4 = st.columns(4)
     with s1:
@@ -346,7 +412,7 @@ with design_tab:
         f"{len(candidates)} sequence(s) × {count_reps} replicate(s) "
         f"= {len(candidates) * count_reps} independent run(s)."
     )
-    if st.button("Prepare designs", type="primary", disabled=not candidates):
+    if st.button("Prepare all staged designs", type="primary", disabled=not candidates):
         try:
             # Preflight every intended destination before preparing any files.
             experiment_dir = choose_batch_name(batch_name)
