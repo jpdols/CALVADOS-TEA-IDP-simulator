@@ -1,16 +1,25 @@
-# Minimal Windows NVIDIA GPU foundation; avoid a huge all-Conda solve.
-# OpenMM 8.2.0 Windows py311 requires CUDA 12.x and scipy<1.14.
-# This pins driver-compatible CUDA 12.8 (not 12.9).
-# Other scientific/app Python packages install in windows/finish_install.cmd,
-# with constraints preventing pip from upgrading OpenMM or numpy.
+# Known-working Windows GPU stack from mep-calvados.
+# Prefer windows/install_from_working_env.cmd, which clones the actual
+# successfully tested environment (including its exact OpenMM binary build).
+# This file is a clean-machine fallback and is not identical to the clone.
 name: calvados-tea-idp-simulator
 channels:
   - conda-forge
 dependencies:
-  - python=3.11
+  - python=3.10
   - pip
-  - git
   - openmm=8.2.0
-  - cuda-version=12.8
-  - numpy>=1.23.5,<2
-  - scipy<1.14
+  - cudatoolkit=11.8.0
+  - numpy=1.26.4
+  - scipy=1.15.2
+  - mdanalysis=2.6.1
+  - mdtraj=1.10.3
+  - biopython=1.81
+  - pandas=2.2.2
+  - matplotlib
+  - jinja2
+  - pyyaml
+  - tqdm
+  - statsmodels
+  - numba
+  - pytest
