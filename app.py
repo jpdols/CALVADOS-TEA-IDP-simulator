@@ -18,7 +18,7 @@ from calvados_library_builder.batch import (
     add_simulation, advance_batch, create_batch, get_batch_counts,
     load_batch, start_batch,
 )
-from calvados_library_builder.config import RUNS_DIR, SimulationConfig
+from calvados_library_builder.config import RUNS_DIR, SimulationConfig, SUPPORTED_PLATFORMS
 from calvados_library_builder.designs import Candidate, make_library, simple_elp, validate_sequence
 from calvados_library_builder.diagnostics import available_platforms
 from calvados_library_builder.preflight import inspect_run
@@ -71,9 +71,9 @@ st.caption("Created by Joep Dols · Nikolina Šoštarić Lab · TU Delft")
 ROOT = RUNS_DIR
 ROOT.mkdir(parents=True, exist_ok=True)
 platforms = available_platforms()
-choices = [p for p in ("CPU", "CUDA") if p in platforms]
-if not choices:
-    choices = ["CPU"]
+# Allow users to attempt any CALVADOS-supported backend. OpenMM's platform
+# listing is informative, not a gate: the child run reports the real outcome.
+choices = list(SUPPORTED_PLATFORMS)
 
 
 def safe_label(value: str) -> str:
@@ -390,7 +390,19 @@ with design_tab:
     with s1:
         temperature = st.selectbox("Temperature (K)", list(range(300, 401, 10)), index=7, help="Simulation temperature in kelvin. The CALVADOS residue interaction table is temperature-dependent; choose the temperature of the desired experiment.")
     with s2:
-        platform = st.selectbox("Compute", choices, help="OpenMM execution backend. CPU works without a compatible NVIDIA GPU; CUDA requires a functioning CUDA platform. This changes performance, not the intended force field.")
+        platform = st.selectbox(
+            "Compute", choices,
+            help="Try CPU or CUDA. CUDA requires an OpenMM CUDA platform plus "
+                 "a compatible NVIDIA GPU/driver. CUDA remains selectable "
+                 "even when the initial OpenMM check does not detect it.",
+        )
+        if platform == "CUDA" and "CUDA" not in platforms:
+            st.warning(
+                "CUDA is not currently listed among the OpenMM platforms "
+                f"({', '.join(platforms)}). You may still prepare and try "
+                "a CUDA run; if it cannot initialize, check run_error.log. "
+                "Use a new experiment name to protect existing results."
+            )
     with s3:
         frames = st.number_input("Saved frames", 2, 50000, 50, help="How many trajectory configurations to save in the DCD. More frames provide better temporal sampling but larger files. Total steps = frames × steps per frame.")
     with s4:
