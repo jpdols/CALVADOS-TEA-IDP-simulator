@@ -116,13 +116,25 @@ if ([string]::IsNullOrWhiteSpace($desktop) -or -not (Test-Path -LiteralPath $des
 }
 $lnk = Join-Path $desktop "ELP Studio.lnk"
 
+# Use the user-supplied assets/elp_studio.ico as the source of truth.
+# Copy it to a versioned, gitignored location: Windows Explorer can otherwise
+# keep showing the previous image when an .ico is overwritten at the same path.
+$runtimeIconDir = Join-Path $root ".elp_studio_runtime\\icons"
+New-Item -ItemType Directory -Path $runtimeIconDir -Force | Out-Null
+$iconHash = (Get-FileHash -LiteralPath $iconPath -Algorithm SHA256).Hash.Substring(0, 16)
+$shortcutIconPath = Join-Path $runtimeIconDir ("elp_studio_" + $iconHash + ".ico")
+if (-not (Test-Path -LiteralPath $shortcutIconPath)) {
+    Copy-Item -LiteralPath $iconPath -Destination $shortcutIconPath
+}
+Write-Host "Using icon from: $iconPath"
+
 $shell = New-Object -ComObject WScript.Shell
 $shortcut = $shell.CreateShortcut($lnk)
 $shortcut.TargetPath = Join-Path $env:WINDIR "System32\wscript.exe"
 $shortcut.Arguments = '"' + $scriptPath + '"'
 $shortcut.WorkingDirectory = $root
 $shortcut.Description = "Start the local CALVADOS ELP Studio"
-$shortcut.IconLocation = $iconPath + ",0"
+$shortcut.IconLocation = $shortcutIconPath + ",0"
 $shortcut.Save()
 
 Write-Host ""
@@ -130,6 +142,7 @@ Write-Host "ELP Studio desktop shortcut created successfully."
 Write-Host "Shortcut: $lnk"
 Write-Host "Project:  $root"
 Write-Host "Python:   $python"
+Write-Host "Icon:     $shortcutIconPath"
 Write-Host ""
 Write-Host "Double-click ELP Studio on your Desktop to launch it."
 Write-Host "If you move the repository or Conda environment, rerun the installer."
