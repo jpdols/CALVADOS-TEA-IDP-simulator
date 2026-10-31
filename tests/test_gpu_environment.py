@@ -89,3 +89,21 @@ def test_gpu_force_failure_falls_back_to_cpu():
     assert "cudatoolkit=11.8.0" not in called["create"][1]
     assert called["removed"] == 1
     assert called["install"] == 1
+
+
+def test_conda_run_works_without_newer_flags():
+    installer = load_installer()
+    with patch.object(installer, "command") as mocked:
+        mocked.return_value.returncode = 0
+        installer.conda_python("conda", "-V")
+    args = mocked.call_args.args[0]
+    assert args[:5] == ["conda", "run", "-n", installer.ENV_NAME, "python"]
+    assert "--no-capture-output" not in args
+
+
+def test_print_command_does_not_require_shlex_join(capsys):
+    installer = load_installer()
+    with patch.object(installer.subprocess, "run") as mocked:
+        mocked.return_value.returncode = 0
+        installer.command(["conda", "env", "list", "--json"])
+    assert "conda" in capsys.readouterr().out
