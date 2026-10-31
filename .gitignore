@@ -20,3 +20,8 @@ __pycache__/
 .vscode/
 .idea/
 .DS_Store
+
+# Portable Windows desktop launcher (machine-specific/generated)
+.elp_studio_launcher.json
+.elp_studio_runtime/
+assets/elp_studio.ico
