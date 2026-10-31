@@ -1,71 +1,79 @@
-# Windows GPU install: preserve the known-working CALVADOS stack
+# One installation: CUDA first, CPU fallback
 
-## Verified baseline (exported from E:\\conda_envs\\mep-calvados)
+ELP Studio has **one portable setup** for Windows, Linux, and macOS.
+No existing Conda environment, local CALVADOS checkout, or fixed disk
+paths are required.
 
-- Windows NVIDIA Quadro P1000 / driver 573.71
-- Python 3.10.19
-- CALVADOS 0.8.0 (editable installation at E:\\Master thesis\\calvados)
-- OpenMM 8.2.0 from conda-forge (win-64 build py310hb455a88_3)
-- cudatoolkit 11.8.0 from conda-forge
-- NumPy 1.26.4; SciPy 1.15.2
-- MDAnalysis 2.6.1; MDTraj 1.10.3
-- Streamlit 1.58.0, Matplotlib 3.10.8, Pandas 2.2.2
-- `python -m openmm.testInstallation` computes forces successfully on CUDA.
+## Install
 
-CALVADOS 0.9.1 is **not necessary** for the existing application's use of
-`calvados.cfg.Config`, `Components`, and the generated `run.py`.
-Its dependency metadata requires Python >=3.11 and pip `openmm[cuda12]`;
-trying to install it previously pulled incompatible CUDA 12.9 libraries.
-We retain 0.8.0 until end-to-end compatibility tests justify an upgrade.
+Install Miniforge (or other Conda distribution) and Git first. From a
+Conda-enabled terminal:
 
-## Recommended: clone existing working environment
-
-**Close Streamlit and Jupyter first.** From Windows Anaconda Prompt:
-
-```bat
-cd /d "E:\\Master thesis\\CALVADOS-TEA-IDP-simulator"
-git pull origin main
-windows\\install_from_working_env.cmd
+```bash
+git clone https://github.com/jpdols/CALVADOS-TEA-IDP-simulator.git
+cd CALVADOS-TEA-IDP-simulator
+python install.py
 conda activate calvados-tea-idp-simulator
-python -m openmm.testInstallation
 python -m streamlit run app.py
 ```
 
-The script runs `conda create -n calvados-tea-idp-simulator --clone
-E:\\conda_envs\\mep-calvados`, validates the CUDA force backend, installs
-ELP Studio with `pip --no-deps --no-build-isolation -e .`, checks imports
-and runs unit tests. It refuses to overwrite an existing destination.
-It **does not change** the original `mep-calvados` environment.
+The script creates a new environment automatically. On NVIDIA-equipped
+computers, it attempts OpenMM 8.2 + CUDA toolkit 11.8; the CUDA force
+calculation must succeed for CUDA to be reported as available.
+If GPU installation fails, the script removes **only the new environment
+it created during that attempt** and installs the same Conda baseline
+without CUDA. On computers without NVIDIA hardware, the CPU setup is
+chosen directly. A CPU force calculation must pass in either case.
 
-**Editable source caveat:** the cloned CALVADOS installation still refers to
-`E:\\Master thesis\\calvados`. This preserves any uncommitted local
-changes, but means the environment alone is not independently portable.
-A truly standalone installation requires recording that local checkout's
-`git rev-parse HEAD` and `git status --short`, plus any local patches.
+Both configurations install CALVADOS 0.8.0 from the pinned public
+upstream Git commit `75711acbf87cc28e00959b8fb38d5132f66709e4`.
+The original source environment that informed the pins is not used
+as a dependency. ELP Studio uses `pip --no-deps` to preserve the
+Conda-managed simulation backend.
 
-If an *already existing* `calvados-tea-idp-simulator` environment is
-reported, inspect it via `conda env list`. Do not remove an environment
-without identifying it and backing up any work. The installer deliberately
-does not delete or overwrite anything.
+## Update and verify
 
-## After a successful install
+From the cloned repository directory:
 
-Run `windows\\install_elp_studio.cmd` from the activated new environment
-to refresh the portable desktop shortcut. For first validation, prepare a
-new short simulation in ELP Studio and select CUDA. Do not reuse a failed
-DCD/checkpoint folder. Compare generated YAML parameters and short-run
-outputs to the working CALVADOS reference before serious production runs.
+```bash
+git pull origin main
+python install.py --check
+python install.py --update
+conda activate calvados-tea-idp-simulator
+python -m streamlit run app.py
+```
 
-## Fresh-machine fallback
+Run `--check` to inspect an existing environment and actually evaluate
+forces. Use `--update` to reinstall the application from the updated
+checkout without changing the OpenMM/CALVADOS versions.
+The installer will not overwrite a pre-existing environment automatically.
 
-`environment.yml` now specifies the same scientific versions under
-Python 3.10 and CUDA 11.8. It is **not** guaranteed to reproduce the exact
-Conda binary build on another machine. Prefer an explicit Conda export
-of the reference environment for bitwise repeatability. A clean-machine
-workflow also needs CALVADOS 0.8.0 installed from an identifiable repository
-revision; upstream merge commit
-`75711acbf87cc28e00959b8fb38d5132f66709e4` corresponds to its 0.8.0
-release, but may differ from the user's editable local checkout.
+For diagnostics:
 
-The retired `windows\\finish_install.cmd` intentionally exits rather than
-install the earlier speculative CUDA 12 stack.
+```bash
+python install.py --dry-run
+python install.py --cpu
+python install.py --gpu
+```
+
+The last two options select an installation attempt for a **new** environment,
+not an existing one. When the CUDA attempt fails, CPU is still installed
+automatically. For a machine that already has an ELP Studio environment
+named `calvados-tea-idp-simulator`, `--check` first.
+
+## Hardware compatibility
+
+CUDA depends on NVIDIA hardware and its compatible installed driver.
+Detecting CUDA libraries is **not** enough; the installer runs a real
+OpenMM force calculation to detect PTX/driver failures. A working
+CUDA backend on one machine does not imply it will work elsewhere.
+CPU fallback does not need an NVIDIA driver.
+
+The reference environment used for these version selections had Windows
+Python 3.10.19, CALVADOS 0.8.0, OpenMM 8.2.0, cudatoolkit 11.8,
+NumPy 1.26.4, SciPy 1.15.2, MDAnalysis 2.6.1, MDTraj 1.10.3.
+The exact cloned binary installation is **not** a prerequisite.
+
+GitHub CI runs unit tests without GPU hardware. An actual short
+CALVADOS simulation remains necessary to validate the full workflow
+on a new installation. Do not reuse incomplete trajectories/checkpoints.
