@@ -4,14 +4,14 @@ $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Drawing
 $folder = Split-Path -Parent $OutputPath
 New-Item -ItemType Directory -Path $folder -Force | Out-Null
-$bitmap = New-Object System.Drawing.Bitmap(128, 128)
+$bitmap = [System.Drawing.Bitmap]::new(128, 128)
 $g = [System.Drawing.Graphics]::FromImage($bitmap)
 $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
 $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
-$background = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(25,29,35))
-$white = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(247,250,252))
-$teal = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(123,205,195))
-$borderPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(226,232,238),6)
+$background = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(25,29,35))
+$white = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(247,250,252))
+$teal = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(123,205,195))
+$borderPen = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(226,232,238),6)
 try {
     $g.Clear([System.Drawing.Color]::Transparent)
     $g.FillEllipse($background,0,0,127,127)
@@ -28,22 +28,22 @@ try {
         $brush = if ($i -eq 0 -or $i -eq 3) { $teal } else { $white }
         $g.FillEllipse($brush,$points[$i].X-8,$points[$i].Y-8,16,16)
     }
-    $font = New-Object System.Drawing.Font("Arial",36,[System.Drawing.FontStyle]::Bold,[System.Drawing.GraphicsUnit]::Pixel)
+    $font = [System.Drawing.Font]::new("Arial",36,[System.Drawing.FontStyle]::Bold,[System.Drawing.GraphicsUnit]::Pixel)
     try {
-        $format = New-Object System.Drawing.StringFormat
+        $format = [System.Drawing.StringFormat]::new()
         $format.Alignment = [System.Drawing.StringAlignment]::Center
         $format.LineAlignment = [System.Drawing.StringAlignment]::Center
-        $g.DrawString("ELP",$font,$white,(New-Object System.Drawing.RectangleF(0,67,128,48)),$format)
+        $g.DrawString("ELP",$font,$white,([System.Drawing.RectangleF]::new(0,67,128,48)),$format)
         $format.Dispose()
     } finally { $font.Dispose() }
     # A PNG-compressed Windows ICO can be written with its 22-byte directory header.
-    $stream = New-Object System.IO.MemoryStream
+    $stream = [System.IO.MemoryStream]::new()
     try {
         $bitmap.Save($stream,[System.Drawing.Imaging.ImageFormat]::Png)
         $png = $stream.ToArray()
         $file = [System.IO.File]::Open($OutputPath,[System.IO.FileMode]::Create)
         try {
-            $writer = New-Object System.IO.BinaryWriter($file)
+            $writer = [System.IO.BinaryWriter]::new($file)
             $writer.Write([UInt16]0)
             $writer.Write([UInt16]1)
             $writer.Write([UInt16]1)
