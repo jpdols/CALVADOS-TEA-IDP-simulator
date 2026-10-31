@@ -7,7 +7,7 @@ if not exist "pyproject.toml" (
   exit /b 1
 )
 if "%CONDA_PREFIX%"=="" (
-  echo ERROR: Activate calvados-elp-gpu128 first.
+  echo ERROR: Activate calvados-tea-idp-simulator first.
   exit /b 1
 )
 
