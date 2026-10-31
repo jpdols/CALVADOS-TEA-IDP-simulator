@@ -2,6 +2,21 @@
 
 # CALVADOS–TEA IDP Simulator
 
+## Windows desktop shortcut (portable)
+
+After the Conda/Python environment has been installed, double-click
+[`windows/install_elp_studio.cmd`](windows/install_elp_studio.cmd)
+once to create an **ELP Studio** shortcut on your Desktop. The installer
+finds the repository automatically, searches for an environment with
+Streamlit and ELP Studio installed, and stores machine-specific paths
+only locally. No fixed `C:\\`/`E:\\` drive or Conda environment
+name is required.
+
+The desktop icon starts the app and opens your browser. For setup,
+custom icons, logs and stopping the local server, see
+[WINDOWS_LAUNCHER.md](WINDOWS_LAUNCHER.md).
+
+
 Local application for designing elastin-like polypeptide (ELP) / IDP sequences, visualizing their motif arrangements and preparing CALVADOS simulations.
 
 **Status:** Local test candidate. The original full Streamlit app is restored: motif library, custom motifs, drag-and-drop architecture editor, sequence inspection, FASTA download, simulation settings, sequential batch queue, subprocess launch and live progress. CPU/CUDA selection and exit-code reporting have been updated. **Full end-to-end simulation on a real CALVADOS/OpenMM installation is still unverified.**
