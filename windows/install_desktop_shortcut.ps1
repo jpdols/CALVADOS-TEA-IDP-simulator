@@ -19,7 +19,11 @@ if (-not (Test-Path -LiteralPath $scriptPath)) {
     throw "Missing launcher: $scriptPath"
 }
 if (-not (Test-Path -LiteralPath $iconPath)) {
-    throw "Missing launcher icon: $iconPath"
+    Write-Host "Generating local ELP Studio icon..."
+    & (Join-Path $PSScriptRoot "create_icon.ps1") -OutputPath $iconPath
+}
+if (-not (Test-Path -LiteralPath $iconPath)) {
+    throw "Unable to create the desktop icon: $iconPath"
 }
 
 function Test-StudioPython {
