@@ -26,7 +26,7 @@ function Server-Ready([int]$port) {
 function Port-Free([int]$port) {
     $listener = $null
     try {
-        $listener = New-Object System.Net.Sockets.TcpListener([System.Net.IPAddress]::Loopback, $port)
+        $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $port)
         $listener.Start()
         return $true
     } catch { return $false }
