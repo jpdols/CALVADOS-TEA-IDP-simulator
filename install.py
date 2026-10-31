@@ -164,7 +164,7 @@ def nvidia_detected() -> bool:
     except (OSError, subprocess.TimeoutExpired):
         return False
     return result.returncode == 0 and bool(
-        re.search(r"\\bGPU\\s+\\d+:", result.stdout)
+        re.search(r"\bGPU\s+\d+:", result.stdout)
     )
 
 
