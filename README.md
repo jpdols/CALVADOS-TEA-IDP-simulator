@@ -23,37 +23,34 @@ Local application for designing elastin-like polypeptide (ELP) / IDP sequences, 
 
 ## Quick start (Windows / Anaconda Prompt)
 
-**Recommended for Windows + NVIDIA GPU:** See
-[INSTALL_GPU_WINDOWS.md](INSTALL_GPU_WINDOWS.md).
-This uses Python 3.11, Conda-managed OpenMM 8.2.0, and CUDA 12.8.
-A fresh installation is isolated from existing environments:
+**Recommended for this Windows Quadro P1000 machine:** Clone the tested
+`E:\\conda_envs\\mep-calvados` Conda environment, then add ELP Studio
+without upgrading its CALVADOS/OpenMM GPU stack. This preserves the original
+working environment and uses a new destination environment named
+`calvados-tea-idp-simulator`.
 
 ```bat
+cd /d "E:\\Master thesis\\CALVADOS-TEA-IDP-simulator"
 git pull origin main
-conda env create -f environment.yml
+windows\\install_from_working_env.cmd
 conda activate calvados-tea-idp-simulator
 python -m openmm.testInstallation
-windows\finish_install.cmd
 python -m streamlit run app.py
 ```
 
-Run these commands from a cloned repository root. First clone with
-`git clone https://github.com/jpdols/CALVADOS-TEA-IDP-simulator.git`
-if necessary. If the Conda solve fails, do not force packages or downgrade
-Python; consult the installation guide.
+The installation script checks for an existing destination and refuses
+to overwrite it. Read [INSTALL_GPU_WINDOWS.md](INSTALL_GPU_WINDOWS.md)
+for troubleshooting, fresh-machine alternatives and the caveat that
+CALVADOS in the source environment is an editable checkout at
+`E:\\Master thesis\\calvados`.
 
-**Why CUDA 12.8 instead of 11.8?** OpenMM 8.2 Python 3.11 packages
-require CUDA 12; the known-working 11.8 reference uses Python 3.10.
-CUDA 12.8 avoids the CUDA 12.9 PTX incompatibility observed with the
-NVIDIA 573.71 driver. The actual CUDA force test still determines
-whether the new installation works on a particular computer.
-
-Upstream CALVADOS 0.9.1 declares the pip `openmm[cuda12]` extra.
-For GPU installs, do not use a plain
-`pip install -e .[app,analysis]`: it may replace the Conda-managed
-OpenMM/CUDA packages. The guarded `windows/finish_install.cmd`
-uses `pip --no-deps` only after the Conda dependencies and CUDA
-test have passed.
+The verified source stack has **Python 3.10.19, CALVADOS 0.8.0,
+OpenMM 8.2.0 (conda-forge), CUDA toolkit 11.8.0, NumPy 1.26.4,
+SciPy 1.15.2, MDAnalysis 2.6.1, MDTraj 1.10.3 and Streamlit 1.58.0**.
+Avoid `pip install -e .[app,analysis]` without `--no-deps`:
+it could change the working simulation dependencies.
+The `environment.yml` is only a fallback for a clean machine; cloning
+the existing working Conda environment is preferred on this computer.
 
 ## Linux / WSL2 / macOS local setup
 
@@ -66,7 +63,7 @@ python -m calvados_library_builder.diagnostics
 python -m streamlit run app.py
 ```
 
-The default `environment.yml` requests CUDA 12 OpenMM from conda-forge; on a machine without a supported CUDA driver, use CPU for simulations. GPU/CUDA requires an NVIDIA GPU, appropriately installed drivers, and the correct OpenMM CUDA runtime. A CPU simulation does not require NVIDIA hardware. CALVADOS's current run input schema **only accepts `CPU` or `CUDA`**, even if your OpenMM installation reports additional platform names such as OpenCL/Reference. If you use macOS, select CPU.
+The default `environment.yml` is a Windows CUDA 11.8 legacy reference; other operating systems should use a separately validated installation. On machines without an NVIDIA GPU, CPU simulations are possible. GPU/CUDA requires an NVIDIA GPU, appropriately installed drivers, and the correct OpenMM CUDA runtime. A CPU simulation does not require NVIDIA hardware. CALVADOS's current run input schema **only accepts `CPU` or `CUDA`**, even if your OpenMM installation reports additional platform names such as OpenCL/Reference. If you use macOS, select CPU.
 
 An alternative to `conda env create` if you already have a suitable Python 3.11 environment:
 
