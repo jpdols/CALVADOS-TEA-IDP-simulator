@@ -7,10 +7,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          # Match the known-working CALVADOS/OpenMM environment.
+          python-version: '3.10'
       - name: Compile all source files
         run: python -m compileall -q app.py src tests
-      - name: Install test runner
-        run: python -m pip install "pytest>=7,<9" numpy pandas pyyaml matplotlib
+      - name: Install CPU-only test dependencies
+        # Importing motif_canvas.py requires Streamlit even though no GPU
+        # or CALVADOS simulation is launched by this CI job.
+        run: |
+          python -m pip install "pytest>=7,<10" "numpy==1.26.4" "pandas==2.2.2" "matplotlib==3.10.8" "PyYAML>=6,<7" "streamlit==1.58.0"
       - name: Test sequence logic without GPU
         run: PYTHONPATH=src python -m pytest -q
