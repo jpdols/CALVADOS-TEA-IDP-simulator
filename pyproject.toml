@@ -10,11 +10,13 @@ readme = "README.md"
 requires-python = ">=3.11,<3.14"
 # CALVADOS v0.9.1 upstream requirements, as declared in its pyproject.toml
 # at the pinned source revision below (accessed 2026-10-30).
-# Upstream requests the CUDA 12 OpenMM extra even when a CPU platform is selected;
-# the app itself can run with CPU or CUDA, depending on local platform availability.
+# Keep OpenMM conda-managed and at the verified target version. Do not request
+# pip's cuda12 extra, which can install mismatched NVIDIA CUDA runtime packages.
+# CALVADOS upstream still declares openmm[cuda12] so install it with --no-deps
+# after the Conda environment has resolved and passed its CUDA force test.
 dependencies = [
     "calvados @ git+https://github.com/KULL-Centre/CALVADOS.git@df7d12a3428a0151a9c4683e1300e086d67d8fa5",
-    "openmm[cuda12]>=8.2,<8.5",
+    "openmm==8.2.0",
     "MDAnalysis>=2.9,<2.11",
     "mdtraj>=1.11,<1.12",
     "numpy",
