@@ -31,7 +31,7 @@ A fresh installation is isolated from existing environments:
 ```bat
 git pull origin main
 conda env create -f environment.yml
-conda activate calvados-elp-gpu128
+conda activate calvados-tea-idp-simulator
 python -m openmm.testInstallation
 windows\finish_install.cmd
 python -m streamlit run app.py
