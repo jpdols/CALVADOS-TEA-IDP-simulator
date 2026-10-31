@@ -24,6 +24,8 @@ def test_launcher_uses_checkout_directory_and_local_config():
     assert '$PSScriptRoot' in installer
     assert '$PSScriptRoot' in launcher
     assert "CONDA_PREFIX" in installer
+    assert "Get-FileHash" in installer
+    assert "$shortcut.IconLocation = $shortcutIconPath" in installer
     assert "python.exe" in installer
     assert ".elp_studio_launcher.json" in installer
     assert ".elp_studio_launcher.json" in launcher
