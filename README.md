@@ -21,57 +21,62 @@ Local application for designing elastin-like polypeptide (ELP) / IDP sequences, 
 
 **Status:** Local test candidate. The original full Streamlit app is restored: motif library, custom motifs, drag-and-drop architecture editor, sequence inspection, FASTA download, simulation settings, sequential batch queue, subprocess launch and live progress. CPU/CUDA selection and exit-code reporting have been updated. **Full end-to-end simulation on a real CALVADOS/OpenMM installation is still unverified.**
 
-## Quick start (Windows / Anaconda Prompt)
+## Install (Windows, Linux, or macOS)
 
-**Recommended for this Windows Quadro P1000 machine:** Clone the tested
-`E:\\conda_envs\\mep-calvados` Conda environment, then add ELP Studio
-without upgrading its CALVADOS/OpenMM GPU stack. This preserves the original
-working environment and uses a new destination environment named
-`calvados-tea-idp-simulator`.
+**One setup for everyone:** the public installer creates a Conda environment named
+`calvados-tea-idp-simulator`. It first attempts OpenMM **CUDA** when an NVIDIA
+GPU/driver is detected; it runs a real CUDA force calculation. If GPU setup
+cannot resolve or CUDA fails, it falls back to **CPU**. Computers without an
+NVIDIA GPU install the CPU backend directly. Both use the same application.
 
-```bat
-cd /d "E:\\Master thesis\\CALVADOS-TEA-IDP-simulator"
-git pull origin main
-windows\\install_from_working_env.cmd
-conda activate calvados-tea-idp-simulator
-python -m openmm.testInstallation
-python -m streamlit run app.py
-```
-
-The installation script checks for an existing destination and refuses
-to overwrite it. Read [INSTALL_GPU_WINDOWS.md](INSTALL_GPU_WINDOWS.md)
-for troubleshooting, fresh-machine alternatives and the caveat that
-CALVADOS in the source environment is an editable checkout at
-`E:\\Master thesis\\calvados`.
-
-The verified source stack has **Python 3.10.19, CALVADOS 0.8.0,
-OpenMM 8.2.0 (conda-forge), CUDA toolkit 11.8.0, NumPy 1.26.4,
-SciPy 1.15.2, MDAnalysis 2.6.1, MDTraj 1.10.3 and Streamlit 1.58.0**.
-Avoid `pip install -e .[app,analysis]` without `--no-deps`:
-it could change the working simulation dependencies.
-The `environment.yml` is only a fallback for a clean machine; cloning
-the existing working Conda environment is preferred on this computer.
-
-## Linux / WSL2 / macOS local setup
+Prerequisites: [Miniforge](https://github.com/conda-forge/miniforge) (or
+another Conda installation) and [Git](https://git-scm.com/downloads).
+Use a Conda-enabled terminal (Anaconda Prompt on Windows).
 
 ```bash
 git clone https://github.com/jpdols/CALVADOS-TEA-IDP-simulator.git
 cd CALVADOS-TEA-IDP-simulator
-conda env create -f environment.yml
+python install.py
 conda activate calvados-tea-idp-simulator
-python -m calvados_library_builder.diagnostics
 python -m streamlit run app.py
 ```
 
-The default `environment.yml` is a Windows CUDA 11.8 legacy reference; other operating systems should use a separately validated installation. On machines without an NVIDIA GPU, CPU simulations are possible. GPU/CUDA requires an NVIDIA GPU, appropriately installed drivers, and the correct OpenMM CUDA runtime. A CPU simulation does not require NVIDIA hardware. CALVADOS's current run input schema **only accepts `CPU` or `CUDA`**, even if your OpenMM installation reports additional platform names such as OpenCL/Reference. If you use macOS, select CPU.
+If already cloned, run `git pull origin main` from the repository before
+`python install.py`. On Windows, the equivalent installer shortcut is
+`windows\\install_from_working_env.cmd`, which now simply calls this same
+portable installer: it does **not** clone any existing user's environment.
 
-An alternative to `conda env create` if you already have a suitable Python 3.11 environment:
+The install uses Python 3.10, OpenMM 8.2, CALVADOS 0.8.0 pinned to a
+**public GitHub revision**, and Conda-managed scientific dependencies.
+It does **not** require any local CALVADOS checkout or fixed disk path.
+CUDA attempts use `cudatoolkit=11.8.0`; CPU fallback omits the toolkit.
+
+For diagnostics, updating, and existing-environment protections:
 
 ```bash
-python -m pip install -e ".[app,analysis,dev]"
+python install.py --check
+python install.py --update
+python install.py --dry-run
 ```
 
-Python alone cannot install your operating system's NVIDIA display/GPU driver.
+To force a CPU-only installation, use `python install.py --cpu`; to
+attempt CUDA even if automatic NVIDIA detection fails, use
+`python install.py --gpu`. The installer will **not overwrite an existing
+environment**; `--update` updates the ELP Studio code in an existing
+compatible environment without changing the simulation engine. The app
+continues to expose both CPU and CUDA options; use the backend that passed
+the installer's force-calculation check.
+
+The Windows Desktop shortcut can be created after installation by running
+`windows\\install_elp_studio.cmd` from the activated environment.
+
+**Validation scope:** GitHub unit tests verify package-independent
+application logic on Linux. They do **not** validate CUDA hardware. CUDA
+is tested locally by the installer itself. A short real CALVADOS run should
+be performed before production simulations.
+
+See [INSTALL_GPU_WINDOWS.md](INSTALL_GPU_WINDOWS.md) for details about the
+GPU-first/CPU-fallback strategy and common errors.
 
 ## Use the application
 
@@ -132,18 +137,21 @@ runs/                       # simulation output, excluded from Git
 
 ## Dependency and versioning policy
 
-The `pyproject.toml` carries the CALVADOS dependencies explicitly and installs CALVADOS itself from upstream commit `df7d12a3428a0151a9c4683e1300e086d67d8fa5`, corresponding to version 0.9.1 at inspection. This avoids silently updating CALVADOS when upstream `main` changes. Scientific simulations should record package versions (`python -m pip freeze`), force field, parameter-file checksum, temperature, ionic strength, pH, seed, simulation steps and output frequency.
-
-See the [upstream CALVADOS installation instructions](https://github.com/KULL-Centre/CALVADOS#installation-instructions) and [dependency specification](https://github.com/KULL-Centre/CALVADOS/blob/main/pyproject.toml). Upstream instructions describe setting up OpenMM via conda-forge (including a CUDA 11.8 toolkit example), while its current Python package lists the CUDA 12 OpenMM extra. The approach in **this repo** follows its current package metadata; mixing both recipes without compatibility checks is not recommended.
+The installer obtains CALVADOS 0.8.0 from a pinned public upstream
+revision and preserves the conda-forge OpenMM 8.2 GPU/CPU binary.
+Scientific reproducibility additionally requires recording the force-field
+residue table, simulation seed, temperature, ionic strength, pH, steps,
+and installed package versions. See `install.py` for the pinned source
+revision and platform validation.
 
 ## Testing
 
 ```bash
-python -m pip install -e ".[dev]"
+python -m pip install --no-deps -e ".[dev]"
 python -m pytest -q
 ```
 
-The test suite currently checks core sequence generation only. **An end-to-end simulation and native Windows CUDA installation have not yet been verified.** The runner and queue are now integrated with the restored Streamlit app; end-to-end testing on a local installation is the next step.
+CI checks the Python application/unit tests without GPU access. The local installer independently checks OpenMM forces on CPU and (when available) CUDA. A full CALVADOS smoke simulation on the target computer is still required.
 
 ## Updating the code from your laptop
 
