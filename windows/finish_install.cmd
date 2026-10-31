@@ -21,6 +21,16 @@ if errorlevel 1 (
 )
 
 echo.
+echo Installing application and scientific dependencies with OpenMM, NumPy and SciPy constrained...
+python -m pip install -c "windows\gpu_constraints.txt" "MDAnalysis>=2.9,<2.11" "mdtraj>=1.11,<1.12" pandas biopython Jinja2 tqdm matplotlib PyYAML "pydantic>=2,<3" statsmodels numba "streamlit>=1.52" plotly openpyxl pytest "setuptools>=77" wheel
+if errorlevel 1 exit /b 1
+
+echo.
+echo Rechecking the CUDA backend was not changed by pip...
+python -c "import openmm; assert openmm.version.full_version.startswith('8.2'), 'Expected OpenMM 8.2'; print('Conda-managed OpenMM preserved:',openmm.version.full_version)"
+if errorlevel 1 exit /b 1
+
+echo.
 echo Installing pinned CALVADOS 0.9.1 without its pip dependency resolver...
 python -m pip install --no-deps "git+https://github.com/KULL-Centre/CALVADOS.git@df7d12a3428a0151a9c4683e1300e086d67d8fa5"
 if errorlevel 1 exit /b 1
