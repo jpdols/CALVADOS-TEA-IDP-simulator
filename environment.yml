@@ -1,15 +1,19 @@
-# Known-working Windows GPU stack from mep-calvados.
-# Prefer windows/install_from_working_env.cmd, which clones the actual
-# successfully tested environment (including its exact OpenMM binary build).
-# This file is a clean-machine fallback and is not identical to the clone.
+# Cross-platform CPU baseline for one-command ELP Studio installation.
+# Run: python install.py
+# The installer attempts CUDA 11.8 on machines with an NVIDIA GPU; if
+# unavailable or the CUDA force test fails, it installs this CPU baseline.
+# Do not put pip package extras here: CALVADOS 0.8.0 is installed from a
+# pinned public GitHub revision, with --no-deps, by install.py.
 name: calvados-tea-idp-simulator
 channels:
   - conda-forge
 dependencies:
   - python=3.10
   - pip
+  - git
+  - setuptools>=77
+  - wheel
   - openmm=8.2.0
-  - cudatoolkit=11.8.0
   - numpy=1.26.4
   - scipy=1.15.2
   - mdanalysis=2.6.1
@@ -21,5 +25,5 @@ dependencies:
   - pyyaml
   - tqdm
   - statsmodels
-  - numba
+  - numba=0.60
   - pytest
