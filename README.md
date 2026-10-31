@@ -27,9 +27,13 @@ conda env create -f environment.yml
 conda activate calvados-tea-idp-simulator
 ```
 
-This installs our project **and CALVADOS automatically**. The Python dependencies come from the **upstream CALVADOS 0.9.1** `pyproject.toml`, including `openmm[cuda12]>=8.2,<8.5`, `MDAnalysis>=2.9,<2.11`, `mdtraj>=1.11,<1.12`, NumPy, pandas, Biopython, Jinja2, tqdm, Matplotlib, PyYAML, Pydantic 2, statsmodels, Numba and SciPy. We also install Streamlit, Plotly and OpenPyXL.
+This installs our project **and CALVADOS automatically**. Crucially, `environment.yml` now installs **OpenMM from conda-forge with `cuda-version=12` before pip installs the app**, so the CUDA backend is included in a fresh Windows Conda environment. The dependencies also include the pinned CALVADOS 0.9.1 code, `MDAnalysis`, `mdtraj`, Streamlit, Plotly and OpenPyXL. A compatible NVIDIA driver must already be installed on the host.
 
-**Compatibility caveat:** CALVADOS's latest source currently documents Linux/POSIX support and requests CUDA-enabled OpenMM libraries by default. Native Windows CUDA installation may not work on every machine. If the environment fails to solve or import OpenMM, use **WSL2/Ubuntu** with a compatible NVIDIA driver, and execute the Linux instructions below. CPU-only users may still encounter CUDA-extra dependency installation issues; these are upstream packaging constraints, not a requirement to own a GPU.
+**CUDA tested locally (October 2026):** Windows, NVIDIA Quadro P1000 (4 GB), driver 573.71, CUDA 12.x; previously, a Python-only OpenMM setup produced `There is no registered Platform called "CUDA"`. Adding conda-forge OpenMM with `cuda-version=12` resolved the missing backend.
+
+**Existing environments after `git pull`:** Git only updates source code; it does **not** install new packages. To upgrade an existing environment to match the repo file, activate the environment and run `conda env update -f environment.yml --prune` if its name is `calvados-tea-idp-simulator`, or install the CUDA backend directly using `conda install -c conda-forge "openmm>=8.2,<8.5" "cuda-version=12"`. Run `python -m openmm.testInstallation` afterward. Avoid mixing multiple incompatible OpenMM installations.
+
+**Compatibility caveat:** CUDA requires supported NVIDIA hardware, driver and OpenMM plugins; installing these dependencies cannot supply a missing GPU or driver. For computers without a compatible GPU, the application can still run on the CPU. On hosts where the CUDA-enabled Conda environment fails to resolve, install with Python/CPU using the alternative setup below or use WSL2/Ubuntu.
 
 3. Check which compute platforms your installation exposes:
 
@@ -56,7 +60,7 @@ python -m calvados_library_builder.diagnostics
 python -m streamlit run app.py
 ```
 
-GPU/CUDA requires an NVIDIA GPU, appropriately installed drivers, and the correct OpenMM CUDA runtime. A CPU simulation does not require NVIDIA hardware. CALVADOS's current run input schema **only accepts `CPU` or `CUDA`**, even if your OpenMM installation reports additional platform names such as OpenCL/Reference. If you use macOS, select CPU.
+The default `environment.yml` requests CUDA 12 OpenMM from conda-forge; on a machine without a supported CUDA driver, use CPU for simulations. GPU/CUDA requires an NVIDIA GPU, appropriately installed drivers, and the correct OpenMM CUDA runtime. A CPU simulation does not require NVIDIA hardware. CALVADOS's current run input schema **only accepts `CPU` or `CUDA`**, even if your OpenMM installation reports additional platform names such as OpenCL/Reference. If you use macOS, select CPU.
 
 An alternative to `conda env create` if you already have a suitable Python 3.11 environment:
 
