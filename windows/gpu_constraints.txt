@@ -1,0 +1,5 @@
+# Keep CUDA-capable OpenMM and its ABI-sensitive dependencies Conda-managed.
+# Applied to pip installs of CALVADOS / ELP Studio Python dependencies.
+openmm==8.2.0
+numpy>=1.23.5,<2
+scipy<1.14
