@@ -1,12 +1,14 @@
-# Start in the cloned repository root:
+# GPU-capable default Conda environment (Windows / Linux, NVIDIA CUDA 12).
+# Create from the cloned repository root:
 #   conda env create -f environment.yml
 #   conda activate calvados-tea-idp-simulator
-#   python -m calvados_library_builder.diagnostics
-#   streamlit run app.py
+#   python -m openmm.testInstallation
+#   python -m streamlit run app.py
 #
-# The editable pip installation pulls pinned CALVADOS v0.9.1 and its
-# OpenMM (CUDA 12 extra) requirements automatically. Selecting CPU in
-# the application does not require an NVIDIA GPU.
+# Install OpenMM and its CUDA 12 platform using conda-forge BEFORE pip:
+# pip's openmm[cuda12] extra alone did not register CUDA on Windows.
+# The NVIDIA driver is a system prerequisite and is not installed by Conda.
+# CPU is also selectable in ELP Studio.
 name: calvados-tea-idp-simulator
 channels:
   - conda-forge
@@ -14,5 +16,7 @@ dependencies:
   - python=3.11
   - pip
   - git
+  - "openmm>=8.2,<8.5"
+  - "cuda-version=12"
   - pip:
       - -e .[app,analysis]
