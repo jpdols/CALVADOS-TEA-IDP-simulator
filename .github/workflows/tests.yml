@@ -10,7 +10,7 @@ jobs:
           # Match the known-working CALVADOS/OpenMM environment.
           python-version: '3.10'
       - name: Compile all source files
-        run: python -m compileall -q app.py src tests
+        run: python -m compileall -q app.py install.py src tests
       - name: Install CPU-only test dependencies
         # Importing motif_canvas.py requires Streamlit even though no GPU
         # or CALVADOS simulation is launched by this CI job.
