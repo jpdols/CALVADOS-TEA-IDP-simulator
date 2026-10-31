@@ -1,0 +1,7 @@
+# Protect Conda-managed scientific binaries from pip upgrade during setup.
+# CALVADOS itself and ELP Studio are installed separately with --no-deps.
+openmm==8.2.0
+numpy==1.26.4
+scipy==1.15.2
+MDAnalysis==2.6.1
+mdtraj==1.10.3
