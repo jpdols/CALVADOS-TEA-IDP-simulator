@@ -1,22 +1,38 @@
-# GPU-capable default Conda environment (Windows / Linux, NVIDIA CUDA 12).
-# Create from the cloned repository root:
-#   conda env create -f environment.yml
-#   conda activate calvados-tea-idp-simulator
-#   python -m openmm.testInstallation
-#   python -m streamlit run app.py
+# Windows CUDA 11.8 reference environment.
+# Verified hardware reference: Quadro P1000, driver 573.71, OpenMM 8.2.0
+# from conda-forge with cudatoolkit 11.8.0 (old mep-calvados environment).
 #
-# Install OpenMM and its CUDA 12 platform using conda-forge BEFORE pip:
-# pip's openmm[cuda12] extra alone did not register CUDA on Windows.
-# The NVIDIA driver is a system prerequisite and is not installed by Conda.
-# CPU is also selectable in ELP Studio.
-name: calvados-tea-idp-simulator
+# IMPORTANT: upstream CALVADOS 0.9.1 declares openmm[cuda12]>=8.2,<8.5.
+# NEVER put pip -e .[app,analysis] here: pip could replace the CUDA 11 build.
+# Install pinned CALVADOS and ELP Studio with --no-deps using
+# windows/install_gpu11_environment.cmd after this Conda stage.
+#
+# OpenMM 8.2.0 + CUDA 11.8 with Python 3.11 is a candidate combination.
+# The known-good reference used Python 3.10; test this new combination
+# with python -m openmm.testInstallation before running CALVADOS.
+name: calvados-elp-gpu11
 channels:
   - conda-forge
 dependencies:
   - python=3.11
   - pip
   - git
-  - "openmm>=8.2,<8.5"
-  - "cuda-version=12"
-  - pip:
-      - -e .[app,analysis]
+  - openmm=8.2.0
+  - cudatoolkit=11.8.0
+  - numpy
+  - pandas
+  - mdanalysis>=2.9,<2.11
+  - mdtraj>=1.11,<1.12
+  - biopython
+  - jinja2
+  - tqdm
+  - matplotlib
+  - pyyaml
+  - pydantic>=2,<3
+  - statsmodels
+  - numba
+  - scipy
+  - streamlit>=1.52
+  - plotly
+  - openpyxl
+  - pytest
