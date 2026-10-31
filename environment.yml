@@ -1,16 +1,8 @@
-# Windows GPU environment: Python 3.11 + CUDA 12.8.
-# The win-64 OpenMM 8.2 py311 build requires CUDA 12 (not cudatoolkit 11.8).
-# Driver 573.71 reports CUDA 12.8; forbid accidental selection of 12.9.
-#
-# IMPORTANT: pinned upstream CALVADOS 0.9.1 declares openmm[cuda12].
-# Install CALVADOS and this application separately with pip --no-deps
-# to prevent pip from replacing conda-forge's OpenMM/CUDA runtime.
-#
-# From the repository root:
-#   conda env create -f environment.yml
-#   conda activate calvados-tea-idp-simulator
-#   python -m openmm.testInstallation
-#   windows\finish_install.cmd
+# Minimal Windows NVIDIA GPU foundation; avoid a huge all-Conda solve.
+# OpenMM 8.2.0 Windows py311 requires CUDA 12.x and scipy<1.14.
+# This pins driver-compatible CUDA 12.8 (not 12.9).
+# Other scientific/app Python packages install in windows/finish_install.cmd,
+# with constraints preventing pip from upgrading OpenMM or numpy.
 name: calvados-tea-idp-simulator
 channels:
   - conda-forge
@@ -22,18 +14,3 @@ dependencies:
   - cuda-version=12.8
   - numpy>=1.23.5,<2
   - scipy<1.14
-  - pandas
-  - mdanalysis>=2.9,<2.11
-  - mdtraj>=1.11,<1.12
-  - biopython
-  - jinja2
-  - tqdm
-  - matplotlib
-  - pyyaml
-  - pydantic>=2,<3
-  - statsmodels
-  - numba
-  - streamlit>=1.52
-  - plotly
-  - openpyxl
-  - pytest
