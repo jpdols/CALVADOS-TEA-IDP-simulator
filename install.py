@@ -106,7 +106,12 @@ def gpu_specs(specs: list[str]) -> list[str]:
 
 
 def command(cmd: list[str], *, capture: bool = False, cwd: Path = ROOT):
-    print("+", shlex.join(str(x) for x in cmd), flush=True)
+    # shlex.join is missing in some older Conda base Python installations.
+    if os.name == "nt":
+        display = subprocess.list2cmdline([str(x) for x in cmd])
+    else:
+        display = " ".join(shlex.quote(str(x)) for x in cmd)
+    print("+", display, flush=True)
     return subprocess.run(
         cmd,
         cwd=str(cwd),
@@ -189,10 +194,9 @@ def remove_new_environment(conda: str) -> None:
 
 
 def conda_python(conda: str, *args: str, capture: bool = False):
-    cmd = [conda, "run"]
-    if not capture:
-        cmd.append("--no-capture-output")
-    cmd.extend(["-n", ENV_NAME, "python", *args])
+    # Some older Conda versions do not support --no-capture-output.
+    # Use the portable 'conda run -n ... python' invocation instead.
+    cmd = [conda, "run", "-n", ENV_NAME, "python", *args]
     return command(cmd, capture=capture)
 
 
