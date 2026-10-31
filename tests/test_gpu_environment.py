@@ -1,25 +1,24 @@
-"""Keep Conda-managed OpenMM/CUDA separate from pip CUDA extras."""
+"""Regression guards: Windows install must preserve the proven CUDA 11.8 stack."""
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_gpu_conda_environment_pins_compatible_cuda():
-    environment = (ROOT / "environment.yml").read_text(encoding="utf-8")
-    assert "python=3.11" in environment
-    assert "openmm=8.2.0" in environment
-    assert "cuda-version=12.8" in environment
-    assert "cudatoolkit=11.8" not in environment.replace(
-        "# The win-64 OpenMM 8.2 py311 build requires CUDA 12 (not cudatoolkit 11.8).", ""
-    )
-    assert "  - pip:" not in environment
+def test_reference_environment_matches_working_calvados():
+    e = (ROOT / "environment.yml").read_text(encoding="utf-8")
+    assert "name: calvados-tea-idp-simulator" in e
+    assert "python=3.10" in e
+    assert "openmm=8.2.0" in e
+    assert "cudatoolkit=11.8.0" in e
+    assert "cuda-version=12.8" not in e
+    assert "  - pip:" not in e
 
 
-def test_gpu_installer_prevents_pip_cuda_extra_installation():
-    installer = (ROOT / "windows/finish_install.cmd").read_text(encoding="utf-8")
-    project = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    assert "openmm==8.2.0" in project
-    assert '"openmm[cuda12]' not in project
-    assert "pip install --no-deps" in installer
-    assert "getForces=True" in installer
-    assert "df7d12a3428a0151a9c4683e1300e086d67d8fa5" in installer
+def test_cloning_script_preserves_existing_gpu_engine():
+    s = (ROOT / "windows/install_from_working_env.cmd").read_text(encoding="utf-8")
+    p = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    assert '--clone "%SOURCE%"' in s
+    assert 'pip install --no-deps --no-build-isolation -e .' in s
+    assert "python -m openmm.testInstallation" in s
+    assert "calvados==0.8.0" in p
+    assert '"openmm[cuda12]' not in p
