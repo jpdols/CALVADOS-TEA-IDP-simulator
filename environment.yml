@@ -1,16 +1,17 @@
-# Windows CUDA 11.8 reference environment.
-# Verified hardware reference: Quadro P1000, driver 573.71, OpenMM 8.2.0
-# from conda-forge with cudatoolkit 11.8.0 (old mep-calvados environment).
+# Windows GPU environment: Python 3.11 + CUDA 12.8.
+# The win-64 OpenMM 8.2 py311 build requires CUDA 12 (not cudatoolkit 11.8).
+# Driver 573.71 reports CUDA 12.8; forbid accidental selection of 12.9.
 #
-# IMPORTANT: upstream CALVADOS 0.9.1 declares openmm[cuda12]>=8.2,<8.5.
-# NEVER put pip -e .[app,analysis] here: pip could replace the CUDA 11 build.
-# Install pinned CALVADOS and ELP Studio with --no-deps using
-# windows/install_gpu11_environment.cmd after this Conda stage.
+# IMPORTANT: pinned upstream CALVADOS 0.9.1 declares openmm[cuda12].
+# Install CALVADOS and this application separately with pip --no-deps
+# to prevent pip from replacing conda-forge's OpenMM/CUDA runtime.
 #
-# OpenMM 8.2.0 + CUDA 11.8 with Python 3.11 is a candidate combination.
-# The known-good reference used Python 3.10; test this new combination
-# with python -m openmm.testInstallation before running CALVADOS.
-name: calvados-elp-gpu11
+# From the repository root:
+#   conda env create -f environment.yml
+#   conda activate calvados-elp-gpu128
+#   python -m openmm.testInstallation
+#   windows\finish_install.cmd
+name: calvados-elp-gpu128
 channels:
   - conda-forge
 dependencies:
@@ -18,8 +19,9 @@ dependencies:
   - pip
   - git
   - openmm=8.2.0
-  - cudatoolkit=11.8.0
-  - numpy
+  - cuda-version=12.8
+  - numpy>=1.23.5,<2
+  - scipy<1.14
   - pandas
   - mdanalysis>=2.9,<2.11
   - mdtraj>=1.11,<1.12
@@ -31,7 +33,6 @@ dependencies:
   - pydantic>=2,<3
   - statsmodels
   - numba
-  - scipy
   - streamlit>=1.52
   - plotly
   - openpyxl
