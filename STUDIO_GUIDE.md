@@ -45,8 +45,9 @@ If a run stays at 0 frames, inspect these files inside its run directory:
 
 A quiet Streamlit terminal does **not** prove the simulation is idle: the
 simulation runs in a child process whose output is redirected to those logs.
-OpenMM's detected backends, not a guessed GPU, determine which platforms the
-new UI offers.
+The Compute selector offers CPU and CUDA. OpenMM platform detection is
+informational and will warn if CUDA is not registered; it does not hide the
+CUDA option. A CUDA simulation still requires a registered OpenMM CUDA plugin.
 
 If you want to test without Streamlit, run the command printed by preflight
 *only when the existing worker is not running*. Never launch a second copy
@@ -337,3 +338,33 @@ affects existing prepared CALVADOS run directories.
 An empty collection disables Prepare, preventing accidental preparation
 of an unstaged design. `runs/_current_elp_draft.json` still separately
 persists the unfinished active design.
+
+
+## Fresh install with CUDA 12 (Windows + NVIDIA GPU)
+
+The repository's `environment.yml` now installs `openmm>=8.2,<8.5` and
+`cuda-version=12` **from conda-forge**, before pip installs the ELP Studio
+and pinned CALVADOS dependencies. This makes the known-working CUDA
+backend part of a new cloned-repository installation. NVIDIA drivers
+are installed separately on the host computer.
+
+```bat
+conda env create -f environment.yml
+conda activate calvados-tea-idp-simulator
+python -m openmm.testInstallation
+python -m streamlit run app.py
+```
+
+**Existing environments:** `git pull` never installs or updates packages.
+If you already have `E:\\conda_envs\\calvados-elp-local`, its CUDA support remains
+installed independently of the repo's environment definition. When you
+need to add it elsewhere, use:
+
+```bat
+conda install -c conda-forge "openmm>=8.2,<8.5" "cuda-version=12"
+python -m openmm.testInstallation
+```
+
+The October 2026 Windows CUDA test succeeded with an NVIDIA Quadro P1000
+(4 GB) and driver 573.71. A new computer still needs suitable NVIDIA
+hardware and a compatible driver; CPU is available when CUDA cannot run.
