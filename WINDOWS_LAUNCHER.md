@@ -79,7 +79,10 @@ generated icon is intentionally not committed to Git.
 
 To customize it, replace `assets/elp_studio.ico` with another valid Windows
 ICO and rerun the installer. The installer **does not overwrite** an icon
-you've already placed there.
+you've already placed there. It creates an icon-cache-safe, hash-named copy
+under `.elp_studio_runtime/icons/` and updates the desktop shortcut to point
+to the new copy, so your updated design appears even if Windows previously
+cached an older `.ico` under the same filename.
 
 Windows often caches shortcut images; refreshing the desktop, or logging
 out and back in, may be needed to see an icon replacement.
