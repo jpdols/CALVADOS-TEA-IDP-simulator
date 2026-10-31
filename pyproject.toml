@@ -7,35 +7,38 @@ name = "calvados-tea-idp-simulator"
 version = "0.2.0"
 description = "Local ELP/IDP sequence designer and CALVADOS simulation manager"
 readme = "README.md"
-requires-python = ">=3.11,<3.14"
-# CALVADOS v0.9.1 upstream requirements, as declared in its pyproject.toml
-# at the pinned source revision below (accessed 2026-10-30).
-# Keep OpenMM conda-managed and at the verified target version. Do not request
-# pip's cuda12 extra, which can install mismatched NVIDIA CUDA runtime packages.
-# CALVADOS upstream still declares openmm[cuda12] so install it with --no-deps
-# after the Conda environment has resolved and passed its CUDA force test.
+requires-python = ">=3.10,<3.14"
+# Match the known-working mep-calvados backend on Windows: CALVADOS 0.8.0,
+# OpenMM 8.2.0, Python 3.10 and CUDA toolkit 11.8.
+# Existing users may have an editable LOCAL CALVADOS source checkout.
+# Avoid installing CALVADOS 0.9.1, which requires Python >=3.11 and pulls
+# pip's CUDA 12 OpenMM extra. The cloned environment already has 0.8.0.
+#
+# The scientific dependency ranges below include the tested working stack.
+# Install ELP Studio using pip --no-deps after cloning or creating the
+# Conda GPU environment to preserve its binary libraries.
 dependencies = [
-    "calvados @ git+https://github.com/KULL-Centre/CALVADOS.git@df7d12a3428a0151a9c4683e1300e086d67d8fa5",
+    "calvados==0.8.0",
     "openmm==8.2.0",
-    "MDAnalysis>=2.9,<2.11",
-    "mdtraj>=1.11,<1.12",
-    "numpy",
+    "MDAnalysis>=2.6.1,<2.11",
+    "mdtraj>=1.10.3,<1.12",
+    "numpy>=1.26,<2",
     "pandas",
     "biopython",
     "Jinja2",
     "tqdm",
     "matplotlib",
     "PyYAML",
-    "pydantic>=2,<3",
+    "localcider>=0.1.21,<0.2",
     "statsmodels",
     "numba",
     "scipy",
 ]
 
 [project.optional-dependencies]
-app = ["streamlit>=1.52", "plotly"]
+app = ["streamlit>=1.52"]
 analysis = ["openpyxl"]
-dev = ["pytest>=7,<9", "pytest-cov>=4,<8", "ruff>=0.17,<1"]
+dev = ["pytest>=7", "pytest-cov>=4,<8", "ruff>=0.17,<1"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
