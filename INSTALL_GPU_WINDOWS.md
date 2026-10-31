@@ -46,6 +46,19 @@ If `conda env create` reports an existing environment, do **not** use
 If the Conda solver reports `UnsatisfiableError`, stop and share its
 output. Do not add CUDA 11.8 or CUDA 12.9 to this environment.
 
+The Conda environment is deliberately **minimal**: Python 3.11, OpenMM 8.2,
+CUDA 12.8, NumPy 1.x, and SciPy below 1.14. The remaining scientific
+and Streamlit packages are installed by `windows/finish_install.cmd`
+with `windows/gpu_constraints.txt`, avoiding the oversized Conda solve
+that previously failed. An older Windows OpenMM 8.2 py311 build has
+explicit constraints `numpy<2` and `scipy<1.14`.
+
+If a previous `conda env create` did not finish, check with
+`conda env list`. Only if a *partial*, disposable environment named
+`calvados-tea-idp-simulator` already exists, remove it first with
+`conda env remove -n calvados-tea-idp-simulator`; do not remove the
+old `mep-calvados` environment.
+
 The `finish_install.cmd` script performs an OpenMM 8.2 CUDA force
 calculation first. A failure means the application installation is not
 attempted. On success it installs pinned CALVADOS 0.9.1 and editable ELP
