@@ -8,10 +8,10 @@
 #
 # From the repository root:
 #   conda env create -f environment.yml
-#   conda activate calvados-elp-gpu128
+#   conda activate calvados-tea-idp-simulator
 #   python -m openmm.testInstallation
 #   windows\finish_install.cmd
-name: calvados-elp-gpu128
+name: calvados-tea-idp-simulator
 channels:
   - conda-forge
 dependencies:
