@@ -34,7 +34,7 @@ Close any running ELP Studio server. From your existing cloned repository:
 cd /d "E:\Master thesis\CALVADOS-TEA-IDP-simulator"
 git pull origin main
 conda env create -f environment.yml
-conda activate calvados-elp-gpu128
+conda activate calvados-tea-idp-simulator
 python -m openmm.testInstallation
 windows\finish_install.cmd
 windows\install_elp_studio.cmd
@@ -53,7 +53,7 @@ Studio without pip dependency resolution, verifies imports, then runs tests.
 
 The desktop launcher setup stores the selected Python interpreter in a
 local JSON file and regenerates the shortcut. Start it from the activated
-environment so it chooses `calvados-elp-gpu128`.
+environment so it chooses `calvados-tea-idp-simulator`.
 
 ## First simulation
 
