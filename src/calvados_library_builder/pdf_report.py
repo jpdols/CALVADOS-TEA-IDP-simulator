@@ -323,5 +323,6 @@ def export_comparison_pdf(frame: pd.DataFrame, *,
         "Author": "Joep Dols — Nikolina Šoštarić Lab, TU Delft",
     }) as pdf:
         _overview(pdf, frame.reset_index(drop=True), motifs)
+        _architecture_details(pdf, frame.reset_index(drop=True), motifs)
         _metric_panels(pdf, frame.reset_index(drop=True))
     return buffer.getvalue()
