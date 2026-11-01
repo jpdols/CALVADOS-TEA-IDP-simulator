@@ -62,3 +62,27 @@ def test_vector_pdf_report_complete(tmp_path):
 def test_pdf_rejects_missing_metrics():
     with pytest.raises(ValueError, match="Missing analysis columns"):
         export_comparison_pdf(pd.DataFrame([{"name": "x", "sequence": "VPGVG"}]))
+
+def test_pdf_grouped_architecture_and_long_sequence_pages():
+    """A long alternating design must retain every group in detail pages."""
+    from unittest.mock import patch
+    from calvados_library_builder import pdf_report
+    runs = "VPGVG" * 2 + "IPAVG" * 4 + "VPGVG" * 6 + "IPAVG" * 4 + "VPGVG" * 2
+    assert motif_runs(runs, get_default_motifs()) == [
+        ("VPGVG", 2), ("IPAVG", 4), ("VPGVG", 6),
+        ("IPAVG", 4), ("VPGVG", 2)
+    ]
+    long_sequence = ("VPGVG" + "IPAVG") * 40
+    frame = pd.DataFrame([{
+        "name": "long_alternating", "sequence": long_sequence,
+        "fraction_collapsed": .55, "mean_rg_nm": 2.8,
+        "mean_rg_collapsed_nm": 2.2,
+        "k_collapse_per_ns": .12, "k_escape_per_ns": .10,
+        "temperature_K": 370,
+    }])
+    assert len(motif_runs(long_sequence, get_default_motifs())) == 80
+    with patch.object(pdf_report, "_draw_group", wraps=pdf_report._draw_group) as grouped:
+        pdf = export_comparison_pdf(frame)
+    assert pdf.startswith(b"%PDF-1.")
+    # Ten overview groups and 80 detail groups (60 + 20 across two pages).
+    assert grouped.call_count == 90
