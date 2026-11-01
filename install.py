@@ -22,6 +22,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -54,6 +55,20 @@ forces = context.getState(getForces=True).getForces(
 ).value_in_unit(unit.kilojoule_per_mole / unit.nanometer)
 assert np.isfinite(forces).all(), 'Nonfinite forces'
 print(platform.getName(), 'computed finite forces with OpenMM', openmm.version.full_version)
+"""
+
+BASELINE_PROBE = """
+import sys
+from importlib import metadata
+assert sys.version_info[:2] == (3, 10), sys.version
+for package, expected in (
+    ("openmm", "8.2.0"), ("numpy", "1.26.4"),
+    ("scipy", "1.15.2"), ("MDAnalysis", "2.6.1"),
+    ("mdtraj", "1.10.3"),
+):
+    found = metadata.version(package)
+    assert found == expected, f"{package}: expected {expected}, found {found}"
+print("Existing Conda scientific environment matches the pinned baseline")
 """
 
 VERSION_PROBE = """
@@ -194,10 +209,26 @@ def remove_new_environment(conda: str) -> None:
 
 
 def conda_python(conda: str, *args: str, capture: bool = False):
-    # Some older Conda versions do not support --no-capture-output.
-    # Use the portable 'conda run -n ... python' invocation instead.
+    # Windows Conda cannot wrap a python -c argument with embedded newlines.
+    # Write multiline diagnostic snippets to a temporary file instead.
+    if len(args) >= 2 and args[0] == "-c" and (
+        "\n" in args[1] or "\r" in args[1]
+    ):
+        with tempfile.TemporaryDirectory(prefix="elp-studio-probe-") as temp_dir:
+            probe_file = Path(temp_dir) / "probe.py"
+            probe_file.write_text(args[1], encoding="utf-8")
+            cmd = [conda, "run", "-n", ENV_NAME, "python", str(probe_file), *args[2:]]
+            return command(cmd, capture=capture)
     cmd = [conda, "run", "-n", ENV_NAME, "python", *args]
     return command(cmd, capture=capture)
+
+
+def verify_baseline(conda: str) -> bool:
+    """Check installed scientific binaries before resuming a partial setup."""
+    result = conda_python(conda, "-c", BASELINE_PROBE, capture=True)
+    if result.stdout:
+        print(result.stdout.strip(), flush=True)
+    return result.returncode == 0
 
 
 def probe_platform(conda: str, platform: str) -> bool:
@@ -262,6 +293,7 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument("--gpu", action="store_true", help="Attempt GPU even without nvidia-smi")
     mode.add_argument("--update", action="store_true", help="Update app in existing compatible environment")
     mode.add_argument("--check", action="store_true", help="Check existing environment without changing it")
+    mode.add_argument("--resume", action="store_true", help="Finish a partial setup in an existing validated environment")
     parser.add_argument("--dry-run", action="store_true", help="Print the plan; make no changes")
     args = parser.parse_args(argv)
 
@@ -291,19 +323,26 @@ def main(argv: list[str] | None = None) -> int:
             print("Installation check PASSED. Working backend:", backend)
             return 0
 
-        if exists and not args.update:
+        if exists and not (args.update or args.resume):
             raise SetupError(
                 f"Environment {ENV_NAME!r} already exists. "
                 "Run 'python install.py --check' to inspect it, "
-                "or 'python install.py --update' if it is compatible. "
+                "'python install.py --resume' to finish a partial installation, "
+                "or 'python install.py --update' for a compatible installed app. "
                 "Never delete an existing environment without reviewing it."
             )
-        if args.update and not exists:
+        if (args.update or args.resume) and not exists:
             raise SetupError(f"Environment {ENV_NAME!r} does not exist; use python install.py")
-        if exists and args.update and not verify_existing(conda):
+        if args.update and not verify_existing(conda):
             raise SetupError(
                 "Existing environment has different versions. It was NOT modified. "
                 "Inspect with 'conda list -n calvados-tea-idp-simulator'."
+            )
+        if args.resume and not verify_baseline(conda):
+            raise SetupError(
+                "The existing environment does not match the pinned scientific "
+                "baseline. It was NOT modified. Inspect it with "
+                "'conda list -n calvados-tea-idp-simulator'."
             )
 
         backend = "CPU"
